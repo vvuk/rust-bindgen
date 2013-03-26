@@ -300,6 +300,8 @@ fn conv_ty(ctx: @BindGenCtx, ty: CXType, cursor: CXCursor) -> @Type {
         @TFloat(FFloat)
     } else if ty.kind == CXType_Double {
         @TFloat(FDouble)
+    } else if ty.kind == CXType_LongDouble {
+        @TFloat(FDouble)
     } else if ty.kind == CXType_Pointer {
         conv_ptr_ty(ctx, clang_getPointeeType(ty), cursor)
     } else if ty.kind == CXType_Record ||
