@@ -174,15 +174,15 @@ impl FieldInfo {
 pub struct EnumInfo {
     name: ~str,
     items: ~[@EnumItem],
-    kind: IKind,
+    signed: bool,
     layout: Layout,
 }
 
 impl EnumInfo {
-    pub fn new(name: ~str, kind: IKind, items: ~[@EnumItem], layout: Layout) -> @mut EnumInfo {
+    pub fn new(name: ~str, signed: bool, items: ~[@EnumItem], layout: Layout) -> @mut EnumInfo {
         @mut EnumInfo { name: name,
                         items: items,
-                        kind: kind,
+                        signed: signed,
                         layout: layout,
                       }
     }

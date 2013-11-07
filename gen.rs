@@ -142,8 +142,8 @@ pub fn gen_rs(out: @mut io::Writer, abi: ~str, link: &Option<~str>, globs: &[Glo
             },
             GEnum(ei) => {
                 ei.name = unnamed_name(&mut ctx, ei.name.clone());
-                defs.push_all(cenum_to_rs(&mut ctx, enum_name(ei.name.clone()), ei.items.clone(),
-                                          ei.kind))
+                defs.push(cenum_to_rs(&mut ctx, enum_name(ei.name.clone()), ei.items.clone(),
+                                      ei.signed, ei.layout))
             },
             _ => { }
         }
@@ -371,7 +371,7 @@ fn ctypedef_to_rs(ctx: &mut GenCtx, name: ~str, ty: @Type) -> ~[@ast::item] {
             let n = ei.name.clone();
             if n.is_empty() {
                 ei.name = name.clone();
-                cenum_to_rs(ctx, name, ei.items.clone(), ei.kind)
+                ~[cenum_to_rs(ctx, name, ei.items.clone(), ei.signed, ei.layout)]
             } else {
                 ~[mk_item(ctx, name, ty)]
             }
@@ -531,35 +531,60 @@ fn cunion_to_rs(ctx: &mut GenCtx, name: ~str, fields: ~[@FieldInfo], layout: Lay
     ];
 }
 
-fn cenum_to_rs(ctx: &mut GenCtx, name: ~str, items: ~[@EnumItem], kind: IKind) -> ~[@ast::item] {
-    let ty = @TInt(kind, Layout::zero());
-    let ty_id = rust_type_id(ctx, name);
-    let ty_def = ctypedef_to_rs(ctx, ty_id, ty);
-    let val_ty = cty_to_rs(ctx, ty);
-    let mut def = ty_def;
+fn cenum_to_rs(ctx: &mut GenCtx, name: ~str, items: ~[@EnumItem], signed: bool, layout: Layout) -> @ast::item {
+    fn mk_repr_attr(ty: &str) -> ast::Attribute {
+        let repr = @dummy_spanned(ast::MetaWord(ty.to_managed()));
+        let attr_val = @dummy_spanned(ast::MetaList(@"repr", ~[repr]));
+        let attr = ast::Attribute_ {
+            style: ast::AttrOuter,
+            value: attr_val,
+            is_sugared_doc: false
+        };
+        dummy_spanned(attr)
+    }
 
+    let ty = match layout.size {
+        1 => if signed { "s8" } else { "u8" },
+        2 => if signed { "s16" } else { "u16" },
+        4 => if signed { "s32" } else { "u32" },
+        8 => if signed { "s64" } else { "u64" },
+        _ => "C"
+    };
+
+    let mut fs = ~[];
     items.iter().advance(|it| {
-        let cst = ast::item_static(
-            val_ty.clone(),
-            ast::MutImmutable,
-            ctx.ext_cx.expr_int(dummy_sp(), it.val)
-        );
-
+        let cst = ctx.ext_cx.expr_int(dummy_sp(), it.val);
         let id = rust_id(ctx, it.name.clone()).first();
-        let val_def = @ast::item {
-                         ident: ctx.ext_cx.ident_of(id),
-                         attrs: ~[],
-                         id: ast::DUMMY_NODE_ID,
-                         node: cst,
-                         vis: ast::public,
-                         span: dummy_sp()
-                      };
+        let val_def = dummy_spanned(ast::variant_ {
+            name: ctx.ext_cx.ident_of(id),
+            attrs: ~[],
+            kind: ast::tuple_variant_kind(~[]),
+            id: ast::DUMMY_NODE_ID,
+            disr_expr: Some(cst),
+            vis: ast::inherited,
+        });
 
-        def.push(val_def);
+        fs.push(val_def);
         true
     });
 
-    return def;
+    let id = rust_type_id(ctx, name);
+    let attr = mk_repr_attr(ty);
+    let def = ast::item_enum(
+        ast::enum_def {
+           variants: fs,
+        },
+        empty_generics()
+    );
+
+    return @ast::item {
+              ident: ctx.ext_cx.ident_of(id),
+              attrs: ~[attr],
+              id: ast::DUMMY_NODE_ID,
+              node: def,
+              vis: ast::public,
+              span: dummy_sp()
+           };
 }
 
 fn mk_link_name_attr(name: ~str) -> ast::Attribute {
