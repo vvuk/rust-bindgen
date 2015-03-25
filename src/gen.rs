@@ -103,16 +103,16 @@ fn comp_name(kind: CompKind, name: &str) -> String {
     }
 }
 
-fn struct_name(name: &str) -> String {
-    format!("Struct_{}", name)
+fn struct_name(name: &String) -> String {
+    name.to_owned()
 }
 
-fn union_name(name: &str) -> String {
-    format!("Union_{}", name)
+fn union_name(name: &String) -> String {
+    name.to_owned()
 }
 
-fn enum_name(name: &str) -> String {
-    format!("Enum_{}", name)
+fn enum_name(name: &String) -> String {
+    name.to_owned()
 }
 
 pub fn gen_mod(
