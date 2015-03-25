@@ -102,15 +102,15 @@ fn comp_name(kind: CompKind, name: &String) -> String {
 }
 
 fn struct_name(name: &String) -> String {
-    format!("Struct_{}", name)
+    format!("{}", name)
 }
 
 fn union_name(name: &String) -> String {
-    format!("Union_{}", name)
+    format!("{}", name)
 }
 
 fn enum_name(name: &String) -> String {
-    format!("Enum_{}", name)
+    format!("{}", name)
 }
 
 pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> Vec<P<ast::Item>> {
