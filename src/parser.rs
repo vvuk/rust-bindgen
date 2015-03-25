@@ -511,7 +511,7 @@ fn visit_top(cursor: &Cursor,
 
     match cursor.kind() {
         CXCursor_UnexposedDecl => {
-            CXChildVisit_Recurse
+            return CXChildVisit_Recurse;
         }
         CXCursor_StructDecl | CXCursor_UnionDecl => {
             fwd_decl(ctx, cursor, |ctx_| {
