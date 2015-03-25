@@ -737,151 +737,46 @@ fn const_to_rs(ctx: &mut GenCtx, name: String, val: i64, val_ty: ast::Ty) -> P<a
     })
 }
 
-fn enum_size_to_rust_type_name(signed: bool, size: usize) -> &'static str {
-    match (signed, size) {
-        (true, 1) => "i8",
-        (false, 1) => "u8",
-        (true, 2) => "i16",
-        (false, 2) => "u16",
-        (true, 4) => "i32",
-        (false, 4) => "u32",
-        (true, 8) => "i64",
-        (false, 8) => "u64",
-        _ => unreachable!("invalid enum decl: signed: {}, size: {}", signed, size),
-    }
-}
+fn cenum_to_rs(ctx: &mut GenCtx, name: String, kind: IKind, items: Vec<EnumItem>) -> Vec<P<ast::Item>> {
+    let variants = items.iter().map(|it| {
+        let value_sign = ast::UnsuffixedIntLit(if it.val < 0 { ast::Minus } else { ast::Plus });
+        let value_node =
+            ast::ExprLit(P(respan(ctx.span, ast::LitInt(it.val.abs() as u64,
+                                                        value_sign))));
 
-fn enum_size_to_unsigned_max_value(size: usize) -> u64 {
-    match size {
-        1 => std::u8::MAX as u64,
-        2 => std::u16::MAX as u64,
-        4 => std::u32::MAX as u64,
-        8 => std::u64::MAX,
-        _ => unreachable!("invalid enum size: {}", size)
-    }
-}
-
-fn cenum_value_to_int_lit(
-        ctx: &mut GenCtx,
-        enum_is_signed: bool,
-        size: usize,
-        value: i64)
-        -> P<ast::Expr> {
-    if enum_is_signed {
-        let int_lit =
-            ast::LitKind::Int(value.abs() as u64, ast::LitIntType::Unsuffixed);
-        let expr = ctx.ext_cx.expr_lit(ctx.span, int_lit);
-        if value < 0 {
-            ctx.ext_cx.expr(
-                ctx.span, ast::ExprKind::Unary(ast::UnOp::Neg, expr))
-        } else {
-            expr
-        }
-    } else {
-        let u64_value =
-            value as u64 & enum_size_to_unsigned_max_value(size);
-        let int_lit =
-            ast::LitKind::Int(u64_value, ast::LitIntType::Unsuffixed);
-        ctx.ext_cx.expr_lit(ctx.span, int_lit)
-    }
-}
-
-fn cenum_to_rs(
-       ctx: &mut GenCtx,
-       rust_enums: bool,
-       derive_debug: bool,
-       name: String,
-       kind: IKind,
-       layout: Layout,
-       enum_items: &[EnumItem])
-       -> Vec<P<ast::Item>> {
-    let enum_name = ctx.ext_cx.ident_of(&name);
-    let enum_ty = ctx.ext_cx.ty_ident(ctx.span, enum_name);
-    let enum_is_signed = kind.is_signed();
-    let enum_repr = enum_size_to_rust_type_name(enum_is_signed, layout.size);
-    let mut items = vec![];
-
-    if !rust_enums {
-        items.push(ctx.ext_cx.item_ty(
-            ctx.span,
-            enum_name,
-            ctx.ext_cx.ty_ident(
-                ctx.span,
-                ctx.ext_cx.ident_of(enum_repr))));
-        for item in enum_items {
-            let value = cenum_value_to_int_lit(
-                ctx, enum_is_signed, layout.size, item.val);
-            items.push(ctx.ext_cx.item_const(
-                ctx.span,
-                ctx.ext_cx.ident_of(&item.name),
-                enum_ty.clone(),
-                value));
-        }
-        return items;
-    }
-
-    let mut variants = vec![];
-    let mut found_values = HashMap::new();
-
-    for item in enum_items {
-        let name = ctx.ext_cx.ident_of(&item.name);
-
-        if let Some(orig) = found_values.get(&item.val) {
-            let value = ctx.ext_cx.expr_path(
-                ctx.ext_cx.path(ctx.span, vec![enum_name, *orig]));
-            items.push(P(ast::Item {
-                ident: name,
-                attrs: vec![],
+        let variant = respan(ctx.span, ast::Variant_ {
+            name: ctx.ext_cx.ident_of(it.name.as_slice()),
+            attrs: vec!(),
+            kind: ast::TupleVariantKind(vec!()),
+            id: ast::DUMMY_NODE_ID,
+            disr_expr: Some(P(ast::Expr {
                 id: ast::DUMMY_NODE_ID,
-                node: ast::ItemKind::Const(enum_ty.clone(), value),
-                vis: ast::Visibility::Public,
-                span: ctx.span,
-            }));
-            continue;
-        }
+                node: value_node,
+                span: ctx.span
+            } )),
+            vis: ast::Inherited
+        });
+        P(variant)
+    }).collect();
 
-        found_values.insert(item.val, name);
-
-        let value = cenum_value_to_int_lit(
-            ctx, enum_is_signed, layout.size, item.val);
-
-        variants.push(respan(ctx.span, ast::Variant_ {
-            name: name,
-            attrs: vec![],
-            data: ast::VariantData::Unit(ast::DUMMY_NODE_ID),
-            disr_expr: Some(value),
-        }));
-    }
-
-    let enum_repr = InternedString::new(enum_repr);
-
-    let repr_arg = ctx.ext_cx.meta_word(ctx.span, enum_repr);
-    let repr_list = ctx.ext_cx.meta_list(ctx.span, InternedString::new("repr"), vec![repr_arg]);
-    let repr_attr = respan(ctx.span, ast::Attribute_ {
-        id: mk_attr_id(),
-        style: ast::AttrStyle::Outer,
-        value: repr_list,
-        is_sugared_doc: false,
-    });
-
-    let attrs = {
-        let mut v = vec![mk_deriving_copy_attr(ctx, true), repr_attr];
-        if derive_debug {
-            v.push(mk_deriving_debug_attr(ctx));
-        }
-        v
-    };
-
-    items.push(P(ast::Item {
-        ident: enum_name,
-        attrs: attrs,
+    vec!(P(ast::Item {
+        ident: ctx.ext_cx.ident_of(&name[..]),
+        attrs: vec!(respan(ctx.span, ast::Attribute_ {
+            id: mk_attr_id(),
+            style: ast::AttrOuter,
+            value: P(respan(ctx.span, ast::MetaList(
+                to_intern_str(ctx, "repr".to_string()),
+                vec!(P(respan(ctx.span,
+                              ast::MetaWord(to_intern_str(ctx, "u32".to_string())))))
+            ))),
+            is_sugared_doc: false
+        })),
         id: ast::DUMMY_NODE_ID,
-        node: ast::ItemKind::Enum(ast::EnumDef { variants: variants }, empty_generics()),
-        vis: ast::Visibility::Public,
-        span: ctx.span,
-    }));
-
-    items
+        node: ast::ItemEnum(ast::EnumDef { variants: variants }, empty_generics()),
+        vis: ast::Public,
+        span: ctx.span
+    }))
+>>>>>>> Generate better enums
 }
 
 /// Generates accessors for fields in nested structs and unions which must be
