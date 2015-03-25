@@ -122,13 +122,9 @@ impl Default for BindgenOptions {
             rust_enums: true,
             links: Vec::new(),
             emit_ast: false,
-            fail_on_unknown_type: false,
-            override_enum_ty: "".to_owned(),
-            clang_args: match get_include_dir() {
-                Some(path) => vec!("-idirafter".to_owned(), path),
-                None => Vec::new()
-            },
-            derive_debug: true
+            fail_on_unknown_type: true,
+            override_enum_ty: "".to_string(),
+            clang_args: Vec::new()
         }
     }
 }
