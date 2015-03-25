@@ -114,7 +114,7 @@ impl Default for BindgenOptions {
             builtins: false,
             links: Vec::new(),
             emit_ast: false,
-            fail_on_unknown_type: false,
+            fail_on_unknown_type: true,
             override_enum_ty: "".to_string(),
             clang_args: Vec::new()
         }
