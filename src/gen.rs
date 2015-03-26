@@ -127,13 +127,14 @@ fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo) -> P<ast::Item> {
                                    sig.is_variadic);
             for arg in sig.args.iter() {
                 let (ref argname, _) = *arg;
+                let (rustargname, _) = rust_id(ctx, argname.clone());
                 let expr = ast::Expr {
                     id: ast::DUMMY_NODE_ID,
                     node: ast::ExprPath(None, ast::Path {
                         span: ctx.span,
                         global: false,
                         segments: vec!(ast::PathSegment {
-                            identifier: ctx.ext_cx.ident_of(argname.as_slice()),
+                            identifier: ctx.ext_cx.ident_of(rustargname.as_slice()),
                             parameters: ast::PathParameters::none()
                         })
                     }),
