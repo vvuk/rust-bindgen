@@ -82,8 +82,20 @@ fn rust_type_id(ctx: &mut GenCtx, name: String) -> String {
         s.push_str(&name[..]);
         s
     } else {
-        let (n, _) = rust_id(ctx, name);
-        n
+        match name.as_slice() {
+            "int8_t" => "i8".to_string(),
+            "uint8_t" => "u8".to_string(),
+            "int16_t" => "i16".to_string(),
+            "uint16_t" => "u16".to_string(),
+            "int32_t" => "i32".to_string(),
+            "uint32_t" => "u32".to_string(),
+            "int64_t" => "i64".to_string(),
+            "uint64_t" => "u64".to_string(),
+            _ => {
+                let (n, _) = rust_id(ctx, name);
+                n
+            }
+        }
     }
 }
 
