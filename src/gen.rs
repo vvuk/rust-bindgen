@@ -815,7 +815,7 @@ fn cenum_to_rs(ctx: &mut GenCtx, name: String, kind: IKind, items: Vec<EnumItem>
                               ast::MetaWord(to_intern_str(ctx, "u32".to_string())))))
             ))),
             is_sugared_doc: false
-        })),
+        }), mk_deriving_copy_attr(ctx)),
         id: ast::DUMMY_NODE_ID,
         node: ast::ItemEnum(ast::EnumDef { variants: variants }, empty_generics()),
         vis: ast::Public,
