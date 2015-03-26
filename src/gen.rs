@@ -117,7 +117,7 @@ fn enum_name(name: &String) -> String {
     name.to_owned()
 }
 
-fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo) -> P<ast::Item> {
+fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo, counts: &mut HashMap<String, isize>) -> P<ast::Item> {
     let fndecl;
     let mut args = vec!();
     match v.ty {
@@ -172,8 +172,19 @@ fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo) -> P<ast::Item> {
         span: ctx.span
     };
 
+    let mut name = v.name.clone();
+    let mut count = 1;
+    match counts.get(&v.name) {
+        Some(x) => {
+            count = *x;
+            name.push_str(&x.to_string());
+        },
+        None => ()
+    }
+    counts.insert(v.name.clone(), count);
+
     let item = ast::Item {
-        ident: ctx.ext_cx.ident_of(v.name.as_slice()),
+        ident: ctx.ext_cx.ident_of(name.as_slice()),
         attrs: vec!(),
         id: ast::DUMMY_NODE_ID,
         node: ast::ItemFn(
@@ -318,7 +329,8 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
         }
     }).collect();
 
-    let mut unmangleFuncs = vec!();
+    let mut unmangle_funcs = vec!();
+    let mut unmangle_count: HashMap<String, isize> = HashMap::new();
     let funcs = {
         let func_list = fs.into_iter().map(|f| {
             match f {
@@ -334,7 +346,7 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
                             } else {
                                 vis = ast::Inherited;
                                 name = v.mangled.clone();
-                                unmangleFuncs.push(gen_unmangle_func(&mut ctx, &v));
+                                unmangle_funcs.push(gen_unmangle_func(&mut ctx, &v, &mut unmangle_count));
                             };
                             let decl = cfunc_to_rs(&mut ctx, name,
                                                    &*sig.ret_ty, &sig.args[..],
@@ -371,7 +383,7 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
     }
 
     //let attrs = vec!(mk_attr_list(&mut ctx, "allow", ["dead_code", "non_camel_case_types", "uppercase_variables"]));
-    defs.extend(unmangleFuncs);
+    defs.extend(unmangle_funcs);
 
     defs
 }
