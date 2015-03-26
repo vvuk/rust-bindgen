@@ -550,6 +550,12 @@ fn visit_top(cursor: &Cursor,
                 return CXChildVisit_Continue;
             }
 
+            let spelling = cursor.spelling();
+            if spelling.len() > 8 &&
+               &(spelling.as_slice())[..8] == "operator" {
+                return CXChildVisit_Continue;
+            }
+
             let func = decl_name(ctx, cursor);
             let vi = func.varinfo();
             let mut vi = vi.borrow_mut();
