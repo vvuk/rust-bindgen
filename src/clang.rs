@@ -39,6 +39,20 @@ impl Cursor {
         }
     }
 
+    pub fn is_template(&self) -> bool {
+        let cur;
+        unsafe {
+            cur = Cursor { x: clang_getSpecializedCursorTemplate(self.x) };
+        }
+        cur.is_valid()
+    }
+
+    pub fn is_valid(&self) -> bool {
+        unsafe {
+            clang_isInvalid(self.kind()) == 0
+        }
+    }
+
     pub fn location(&self) -> SourceLocation {
         unsafe {
             SourceLocation { x: clang_getCursorLocation(self.x) }

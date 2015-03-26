@@ -514,6 +514,10 @@ fn visit_top<'r>(cursor: &Cursor,
             return CXChildVisit_Recurse;
         }
         CXCursor_StructDecl | CXCursor_UnionDecl => {
+            if cursor.is_template() {
+                return CXChildVisit_Continue;
+            }
+
             fwd_decl(ctx, cursor, |ctx_| {
                 let decl = decl_name(ctx_, cursor);
                 let ci = decl.compinfo();
