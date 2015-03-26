@@ -529,6 +529,14 @@ fn visit_top<'r>(cursor: &Cursor,
             });
             return CXChildVisit_Continue;
         }
+        CXCursor_ClassDecl => {
+            if cursor.is_template() {
+                return CXChildVisit_Continue;
+            }
+
+            opaque_decl(ctx, cursor);
+            return CXChildVisit_Continue;
+        }
         CXCursor_EnumDecl => {
             fwd_decl(ctx, cursor, |ctx_| {
                 let decl = decl_name(ctx_, cursor);
