@@ -215,15 +215,17 @@ pub enum CompKind {
 pub struct CompInfo {
     pub kind: CompKind,
     pub name: String,
+    pub filename: String,
     pub members: Vec<CompMember>,
     pub layout: Layout,
 }
 
 impl CompInfo {
-    pub fn new(name: String, kind: CompKind, members: Vec<CompMember>, layout: Layout) -> CompInfo {
+    pub fn new(name: String, filename: String, kind: CompKind, members: Vec<CompMember>, layout: Layout) -> CompInfo {
         CompInfo {
             kind: kind,
             name: name,
+            filename: filename,
             members: members,
             layout: layout,
         }
@@ -256,15 +258,17 @@ impl FieldInfo {
 #[derive(Clone, PartialEq)]
 pub struct EnumInfo {
     pub name: String,
+    pub filename: String,
     pub items: Vec<EnumItem>,
     pub kind: IKind,
     pub layout: Layout,
 }
 
 impl EnumInfo {
-    pub fn new(name: String, kind: IKind, items: Vec<EnumItem>, layout: Layout) -> EnumInfo {
+    pub fn new(name: String, filename: String, kind: IKind, items: Vec<EnumItem>, layout: Layout) -> EnumInfo {
         EnumInfo {
             name: name,
+            filename: filename,
             items: items,
             kind: kind,
             layout: layout,

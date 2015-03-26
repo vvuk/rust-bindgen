@@ -5,6 +5,7 @@ use std::collections::hash_map;
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
+use std::path::Path;
 
 use syntax::abi;
 
@@ -67,16 +68,20 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
         hash_map::Entry::Vacant(e) => {
             new_decl = true;
             let spelling = cursor.spelling();
+            let (file, _, _, _) = cursor.location().location();
             let ty = cursor.cur_type();
             let layout = Layout::new(ty.size(), ty.align());
-
+            let filename = match Path::new(&file.name()).file_name() {
+                Some(name) => name.to_string_lossy().replace(".", "_"),
+                _ => "".to_string()
+            };
             let glob_decl = match cursor.kind() {
                 CXCursor_StructDecl => {
-                    let ci = Rc::new(RefCell::new(CompInfo::new(spelling, CompKind::Struct, vec!(), layout)));
+                    let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), layout)));
                     GCompDecl(ci)
                 }
                 CXCursor_UnionDecl => {
-                    let ci = Rc::new(RefCell::new(CompInfo::new(spelling, CompKind::Union, vec!(), layout)));
+                    let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Union, vec!(), layout)));
                     GCompDecl(ci)
                 }
                 CXCursor_EnumDecl => {
@@ -96,7 +101,7 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                             _ => IInt,
                         }
                     };
-                    let ei = Rc::new(RefCell::new(EnumInfo::new(spelling, kind, vec!(), layout)));
+                    let ei = Rc::new(RefCell::new(EnumInfo::new(spelling, filename, kind, vec!(), layout)));
                     GEnumDecl(ei)
                 }
                 CXCursor_ClassDecl |
