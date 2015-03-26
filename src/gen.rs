@@ -137,16 +137,22 @@ fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo, counts: &mut HashMap<String,
             fndecl = cfuncty_to_rs(ctx,
                                    &*sig.ret_ty, sig.args.as_slice(),
                                    false);
+            let mut unnamed: usize = 0;
             for arg in sig.args.iter() {
-                let (ref argname, _) = *arg;
-                let (rustargname, _) = rust_id(ctx, argname.clone());
+                let (ref n, _) = *arg;
+                let argname = if n.is_empty() {
+                    unnamed += 1;
+                    format!("arg{}", unnamed)
+                } else {
+                    rust_id(ctx, n.clone()).0
+                };
                 let expr = ast::Expr {
                     id: ast::DUMMY_NODE_ID,
                     node: ast::ExprPath(None, ast::Path {
                         span: ctx.span,
                         global: false,
                         segments: vec!(ast::PathSegment {
-                            identifier: ctx.ext_cx.ident_of(rustargname.as_slice()),
+                            identifier: ctx.ext_cx.ident_of(argname.as_slice()),
                             parameters: ast::PathParameters::none()
                         })
                     }),
