@@ -115,11 +115,78 @@ fn enum_name(name: &String) -> String {
     name.to_owned()
 }
 
-pub fn gen_mod(
-        options: &BindgenOptions,
-        globs: Vec<Global>,
-        span: Span)
-        -> Vec<P<ast::Item>> {
+fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo) -> P<ast::Item> {
+    let fndecl;
+    let mut args = vec!();
+    match v.ty {
+        TFuncPtr(ref sig) => {
+            fndecl = cfuncty_to_rs(ctx,
+                                   &*sig.ret_ty, sig.args.as_slice(),
+                                   sig.is_variadic);
+            for arg in sig.args.iter() {
+                let (ref argname, _) = *arg;
+                let expr = ast::Expr {
+                    id: ast::DUMMY_NODE_ID,
+                    node: ast::ExprPath(None, ast::Path {
+                        span: ctx.span,
+                        global: false,
+                        segments: vec!(ast::PathSegment {
+                            identifier: ctx.ext_cx.ident_of(argname.as_slice()),
+                            parameters: ast::PathParameters::none()
+                        })
+                    }),
+                    span: ctx.span
+                };
+                args.push(P(expr));
+            }
+        },
+        _ => unreachable!()
+    };
+
+    let block = ast::Block {
+        stmts: vec!(),
+        expr: Some(P(ast::Expr {
+            id: ast::DUMMY_NODE_ID,
+            node: ast::ExprCall(
+                P(ast::Expr {
+                    id: ast::DUMMY_NODE_ID,
+                    node: ast::ExprPath(None, ast::Path {
+                        span: ctx.span,
+                        global: false,
+                        segments: vec!(ast::PathSegment {
+                            identifier: ctx.ext_cx.ident_of(v.mangled.as_slice()),
+                            parameters: ast::PathParameters::none()
+                        })
+                    }),
+                    span: ctx.span
+                }),
+                args
+            ),
+            span: ctx.span
+        })),
+        id: ast::DUMMY_NODE_ID,
+        rules: ast::DefaultBlock,
+        span: ctx.span
+    };
+
+    let item = ast::Item {
+        ident: ctx.ext_cx.ident_of(v.name.as_slice()),
+        attrs: vec!(),
+        id: ast::DUMMY_NODE_ID,
+        node: ast::ItemFn(
+            P(fndecl),
+            ast::Unsafety::Normal,
+            abi::Rust,
+            empty_generics(),
+            P(block)
+        ),
+        vis: ast::Public,
+        span: ctx.span
+    };
+    P(item)
+}
+
+pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> Vec<P<ast::Item>> {
     // Create a dummy ExtCtxt. We only need this for string interning and that uses TLS.
     let mut features = Features::new();
     features.allow_quote = true;
@@ -248,6 +315,7 @@ pub fn gen_mod(
         }
     }).collect();
 
+    let mut unmangleFuncs = vec!();
     let funcs = {
         let func_list = fs.into_iter().map(|f| {
             match f {
@@ -255,9 +323,19 @@ pub fn gen_mod(
                     let v = vi.borrow();
                     match v.ty {
                         TFuncPtr(ref sig) => {
-                            let decl = cfunc_to_rs(&mut ctx, v.name.clone(),
+                            let name;
+                            let vis;
+                            if v.mangled.is_empty() {
+                                vis = ast::Public;
+                                name = v.name.clone();
+                            } else {
+                                vis = ast::Inherited;
+                                name = v.mangled.clone();
+                                unmangleFuncs.push(gen_unmangle_func(&mut ctx, &v));
+                            };
+                            let decl = cfunc_to_rs(&mut ctx, name,
                                                    &*sig.ret_ty, &sig.args[..],
-                                                   sig.is_variadic);
+                                                   sig.is_variadic, vis);
                             (sig.abi, decl)
                         }
                         _ => unreachable!()
@@ -290,6 +368,7 @@ pub fn gen_mod(
     }
 
     //let attrs = vec!(mk_attr_list(&mut ctx, "allow", ["dead_code", "non_camel_case_types", "uppercase_variables"]));
+    defs.extend(unmangleFuncs);
 
     defs
 }
@@ -1041,7 +1120,8 @@ fn cfuncty_to_rs(ctx: &mut GenCtx,
 
 fn cfunc_to_rs(ctx: &mut GenCtx, name: String, rty: &Type,
                aty: &[(String, Type)],
-               var: bool) -> ast::ForeignItem {
+               var: bool,
+               vis: ast::Visibility) -> P<ast::ForeignItem> {
     let var = !aty.is_empty() && var;
     let decl = ast::ForeignItemKind::Fn(
         P(cfuncty_to_rs(ctx, rty, aty, var)),
@@ -1055,14 +1135,14 @@ fn cfunc_to_rs(ctx: &mut GenCtx, name: String, rty: &Type,
         attrs.push(mk_link_name_attr(ctx, name));
     }
 
-    ast::ForeignItem {
-        ident: ctx.ext_cx.ident_of(&rust_name[..]),
-        attrs: attrs,
-        node: decl,
-        id: ast::DUMMY_NODE_ID,
-        span: ctx.span,
-        vis: ast::Visibility::Public,
-    }
+    return P(ast::ForeignItem {
+              ident: ctx.ext_cx.ident_of(&rust_name[..]),
+              attrs: attrs,
+              node: decl,
+              id: ast::DUMMY_NODE_ID,
+              span: ctx.span,
+              vis: vis,
+           });
 }
 
 fn cty_to_rs(ctx: &mut GenCtx, ty: &Type) -> ast::Ty {
