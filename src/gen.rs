@@ -824,7 +824,7 @@ fn cenum_to_rs(ctx: &mut GenCtx, name: String, kind: IKind, items: Vec<EnumItem>
             value: P(respan(ctx.span, ast::MetaList(
                 to_intern_str(ctx, "repr".to_string()),
                 vec!(P(respan(ctx.span,
-                              ast::MetaWord(to_intern_str(ctx, "u32".to_string())))))
+                              ast::MetaWord(to_intern_str(ctx, "i32".to_string())))))
             ))),
             is_sugared_doc: false
         }), mk_deriving_copy_attr(ctx)),
