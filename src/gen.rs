@@ -120,7 +120,7 @@ fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo) -> P<ast::Item> {
         TFuncPtr(ref sig) => {
             fndecl = cfuncty_to_rs(ctx,
                                    &*sig.ret_ty, sig.args.as_slice(),
-                                   sig.is_variadic);
+                                   false);
             for arg in sig.args.iter() {
                 let (ref argname, _) = *arg;
                 let (rustargname, _) = rust_id(ctx, argname.clone());
