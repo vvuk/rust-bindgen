@@ -281,6 +281,7 @@ impl fmt::Debug for TypeInfo {
 #[derive(Clone)]
 pub struct VarInfo {
     pub name: String,
+    pub mangled: String,
     pub ty: Type,
     //TODO: support non-integer constants
     pub val: Option<i64>,
@@ -288,9 +289,10 @@ pub struct VarInfo {
 }
 
 impl VarInfo {
-    pub fn new(name: String, ty: Type) -> VarInfo {
+    pub fn new(name: String, mangled: String, ty: Type) -> VarInfo {
         VarInfo {
             name: name,
+            mangled: mangled,
             ty: ty,
             val: None,
             is_const: false

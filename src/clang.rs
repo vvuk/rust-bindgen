@@ -27,6 +27,12 @@ impl Cursor {
         }
     }
 
+    pub fn mangling(&self) -> String {
+        unsafe {
+            String_ { x: clang_Cursor_getMangling(self.x) }.to_string()
+        }
+    }
+
     pub fn kind(&self) -> Enum_CXCursorKind {
         unsafe {
             clang_getCursorKind(self.x)

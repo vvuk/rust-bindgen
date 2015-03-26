@@ -105,11 +105,13 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                     GType(ti)
                 }
                 CXCursor_VarDecl => {
-                    let vi = Rc::new(RefCell::new(VarInfo::new(spelling, TVoid)));
+                    let mangled = cursor.mangling();
+                    let vi = Rc::new(RefCell::new(VarInfo::new(spelling, mangled, TVoid)));
                     GVar(vi)
                 }
                 CXCursor_FunctionDecl => {
-                    let vi = Rc::new(RefCell::new(VarInfo::new(spelling, TVoid)));
+                    let mangled = cursor.mangling();
+                    let vi = Rc::new(RefCell::new(VarInfo::new(spelling, mangled, TVoid)));
                     GFunc(vi)
                 }
                 _ => GOther,

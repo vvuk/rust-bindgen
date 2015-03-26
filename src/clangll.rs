@@ -1129,6 +1129,7 @@ extern "C" {
     pub fn clang_Cursor_getCommentRange(C: CXCursor) -> CXSourceRange;
     pub fn clang_Cursor_getRawCommentText(C: CXCursor) -> CXString;
     pub fn clang_Cursor_getBriefCommentText(C: CXCursor) -> CXString;
+    pub fn clang_Cursor_getMangling(C: CXCursor) -> CXString;
     pub fn clang_Cursor_getParsedComment(C: CXCursor) -> CXComment;
     pub fn clang_Cursor_getModule(C: CXCursor) -> CXModule;
     pub fn clang_Module_getASTFile(Module: CXModule) -> CXFile;
