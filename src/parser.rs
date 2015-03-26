@@ -585,6 +585,10 @@ fn visit_top(cursor: &Cursor,
                 under_ty = under_ty.canonical_type();
             }
 
+            if cursor.spelling() ==
+               cursor.typedef_type().declaration().spelling() {
+                return CXChildVisit_Continue;
+            }
             let ty = conv_ty(ctx, &under_ty, cursor);
             let typedef = decl_name(ctx, cursor);
             let ti = typedef.typeinfo();
