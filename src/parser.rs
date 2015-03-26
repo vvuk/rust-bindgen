@@ -599,7 +599,10 @@ fn visit_top(cursor: &Cursor,
         CXCursor_FieldDecl => {
             CXChildVisit_Continue
         }
-        _ => CXChildVisit_Continue,
+        CXCursor_Namespace => {
+            return CXChildVisit_Recurse;
+        }
+        _ => return CXChildVisit_Continue,
     }
 }
 
