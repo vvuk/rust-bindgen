@@ -99,8 +99,6 @@ fn rust_type_id(ctx: &mut GenCtx, name: String) -> String {
     }
 }
 
-<<<<<<< 9c236f4e179b2545fe58d9ca1ea8541571ab8702
-fn unnamed_name(ctx: &mut GenCtx, name: String) -> String {
 fn unnamed_name(ctx: &mut GenCtx, name: String, filename: String) -> String {
     return if name.is_empty() {
         ctx.unnamed_ty += 1;
@@ -888,7 +886,6 @@ fn cenum_to_rs(ctx: &mut GenCtx, name: String, kind: IKind, items: Vec<EnumItem>
         vis: ast::Public,
         span: ctx.span
     }))
->>>>>>> Generate better enums
 }
 
 /// Generates accessors for fields in nested structs and unions which must be
@@ -1103,8 +1100,8 @@ fn cfuncty_to_rs(ctx: &mut GenCtx,
                  var: bool) -> ast::FnDecl {
 
     let ret = match *rty {
-        TVoid => ast::FunctionRetTy::Default(ctx.span),
-        _ => ast::FunctionRetTy::Ty(P(cty_to_rs(ctx, rty)))
+        TVoid => ast::DefaultReturn(ctx.span),
+        _ => ast::Return(P(cty_to_rs(ctx, rty)))
     };
 
     let mut unnamed: usize = 0;
