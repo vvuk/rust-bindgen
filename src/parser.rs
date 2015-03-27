@@ -104,7 +104,10 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                     let ei = Rc::new(RefCell::new(EnumInfo::new(spelling, filename, kind, vec!(), layout)));
                     GEnumDecl(ei)
                 }
-                CXCursor_ClassDecl |
+                CXCursor_ClassDecl => {
+                    let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), layout)));
+                    GCompDecl(ci)
+                }
                 CXCursor_TypedefDecl => {
                     let ti = Rc::new(RefCell::new(TypeInfo::new(spelling, TVoid)));
                     GType(ti)
@@ -236,12 +239,9 @@ fn mk_fn_sig(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Fu
 
 fn conv_decl_ty(ctx: &mut ClangParserCtx, cursor: &Cursor) -> il::Type {
     return match cursor.kind() {
-        CXCursor_StructDecl => {
-            let decl = decl_name(ctx, cursor);
-            let ci = decl.compinfo();
-            TComp(ci)
-        }
-        CXCursor_UnionDecl => {
+        CXCursor_StructDecl |
+        CXCursor_UnionDecl |
+        CXCursor_ClassDecl => {
             let decl = decl_name(ctx, cursor);
             let ci = decl.compinfo();
             TComp(ci)
@@ -251,7 +251,6 @@ fn conv_decl_ty(ctx: &mut ClangParserCtx, cursor: &Cursor) -> il::Type {
             let ei = decl.enuminfo();
             TEnum(ei)
         }
-        CXCursor_ClassDecl |
         CXCursor_TypedefDecl => {
             let decl = decl_name(ctx, cursor);
             let ti = decl.typeinfo();
@@ -513,7 +512,7 @@ fn visit_top<'r>(cursor: &Cursor,
         CXCursor_UnexposedDecl => {
             return CXChildVisit_Recurse;
         }
-        CXCursor_StructDecl | CXCursor_UnionDecl => {
+        CXCursor_StructDecl | CXCursor_UnionDecl | CXCursor_ClassDecl=> {
             if cursor.is_template() {
                 return CXChildVisit_Continue;
             }
@@ -527,14 +526,6 @@ fn visit_top<'r>(cursor: &Cursor,
                 });
                 ctx_.globals.push(GComp(ci));
             });
-            return CXChildVisit_Continue;
-        }
-        CXCursor_ClassDecl => {
-            if cursor.is_template() {
-                return CXChildVisit_Continue;
-            }
-
-            opaque_decl(ctx, cursor);
             return CXChildVisit_Continue;
         }
         CXCursor_EnumDecl => {
