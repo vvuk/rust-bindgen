@@ -1247,7 +1247,7 @@ fn mk_fn_proto_ty(ctx: &mut GenCtx, decl: &ast::FnDecl, abi: abi::Abi) -> ast::T
 
 fn mk_fnty(ctx: &mut GenCtx, decl: &ast::FnDecl, abi: abi::Abi) -> ast::Ty {
     let fnty = ast::TyBareFn(P(ast::BareFnTy {
-        unsafety: ast::Unsafety::Normal,
+        unsafety: ast::Unsafety::Unsafe,
         abi: abi,
         lifetimes: Vec::new(),
         decl: P(decl.clone())
