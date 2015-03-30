@@ -61,73 +61,83 @@ fn match_pattern(ctx: &mut ClangParserCtx, cursor: &Cursor) -> bool {
 
 fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
     let cursor = cursor.canonical();
-    let mut new_decl = false;
     let override_enum_ty = ctx.options.override_enum_ty;
-    let decl = match ctx.name.entry(cursor) {
-        hash_map::Entry::Occupied(ref e) => e.get().clone(),
-        hash_map::Entry::Vacant(e) => {
-            new_decl = true;
-            let spelling = cursor.spelling();
-            let (file, _, _, _) = cursor.location().location();
-            let ty = cursor.cur_type();
-            let layout = Layout::new(ty.size(), ty.align());
-            let filename = match Path::new(&file.name()).file_name() {
-                Some(name) => name.to_string_lossy().replace(".", "_"),
-                _ => "".to_string()
-            };
-            let glob_decl = match cursor.kind() {
-                CXCursor_StructDecl => {
-                    let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), layout)));
-                    GCompDecl(ci)
-                }
-                CXCursor_UnionDecl => {
-                    let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Union, vec!(), layout)));
-                    GCompDecl(ci)
-                }
-                CXCursor_EnumDecl => {
-                    let kind = match override_enum_ty {
-                        Some(t) => t,
-                        None => match cursor.enum_type().kind() {
-                            CXType_SChar | CXType_Char_S => ISChar,
-                            CXType_UChar | CXType_Char_U => IUChar,
-                            CXType_UShort => IUShort,
-                            CXType_UInt => IUInt,
-                            CXType_ULong => IULong,
-                            CXType_ULongLong => IULongLong,
-                            CXType_Short => IShort,
-                            CXType_Int => IInt,
-                            CXType_Long => ILong,
-                            CXType_LongLong => ILongLong,
-                            _ => IInt,
-                        }
-                    };
-                    let ei = Rc::new(RefCell::new(EnumInfo::new(spelling, filename, kind, vec!(), layout)));
-                    GEnumDecl(ei)
-                }
-                CXCursor_ClassDecl => {
-                    let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), layout)));
-                    GCompDecl(ci)
-                }
-                CXCursor_TypedefDecl => {
-                    let ti = Rc::new(RefCell::new(TypeInfo::new(spelling, TVoid)));
-                    GType(ti)
-                }
-                CXCursor_VarDecl => {
-                    let mangled = cursor.mangling();
-                    let vi = Rc::new(RefCell::new(VarInfo::new(spelling, mangled, TVoid)));
-                    GVar(vi)
-                }
-                CXCursor_FunctionDecl => {
-                    let mangled = cursor.mangling();
-                    let vi = Rc::new(RefCell::new(VarInfo::new(spelling, mangled, TVoid)));
-                    GFunc(vi)
-                }
-                _ => GOther,
-            };
+    let new_decl = !ctx.name.contains_key(&cursor);
 
-            e.insert(glob_decl.clone());
-            glob_decl
-        },
+    let decl = if new_decl {
+        let spelling = cursor.spelling();
+        let (file, _, _, _) = cursor.location().location();
+        let ty = cursor.cur_type();
+        let layout = Layout::new(ty.size(), ty.align());
+        let filename = match Path::new(&file.name()).file_name() {
+            Some(name) => name.to_string_lossy().replace(".", "_"),
+            _ => "".to_string()
+        };
+        let glob_decl = match cursor.kind() {
+            CXCursor_StructDecl => {
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), vec!(), layout)));
+                GCompDecl(ci)
+            }
+            CXCursor_UnionDecl => {
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Union, vec!(), vec!(), layout)));
+                GCompDecl(ci)
+            }
+            CXCursor_EnumDecl => {
+                let kind = match override_enum_ty {
+                    Some(t) => t,
+                    None => match cursor.enum_type().kind() {
+                        CXType_SChar | CXType_Char_S => ISChar,
+                        CXType_UChar | CXType_Char_U => IUChar,
+                        CXType_UShort => IUShort,
+                        CXType_UInt => IUInt,
+                        CXType_ULong => IULong,
+                        CXType_ULongLong => IULongLong,
+                        CXType_Short => IShort,
+                        CXType_Int => IInt,
+                        CXType_Long => ILong,
+                        CXType_LongLong => ILongLong,
+                        _ => IInt,
+                    }
+                };
+                let ei = Rc::new(RefCell::new(EnumInfo::new(spelling, filename, kind, vec!(), layout)));
+                GEnumDecl(ei)
+            }
+            CXCursor_ClassDecl => {
+                let args = match ty.num_template_args() {
+                    -1 => vec!(),
+                    len => {
+                        let mut list = Vec::with_capacity(len as usize);
+                        for i in 0..len {
+                            let arg_type = ty.template_arg_type(i);
+                            list.push(conv_ty(ctx, &arg_type, &cursor));
+                        }
+                        list
+                    }
+                };
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), args, layout)));
+                GCompDecl(ci)
+            }
+            CXCursor_TypedefDecl => {
+                let ti = Rc::new(RefCell::new(TypeInfo::new(spelling, TVoid)));
+                GType(ti)
+            }
+            CXCursor_VarDecl => {
+                let mangled = cursor.mangling();
+                let vi = Rc::new(RefCell::new(VarInfo::new(spelling, mangled, TVoid)));
+                GVar(vi)
+            }
+            CXCursor_FunctionDecl => {
+                let mangled = cursor.mangling();
+                let vi = Rc::new(RefCell::new(VarInfo::new(spelling, mangled, TVoid)));
+                GFunc(vi)
+            }
+            _ => GOther,
+        };
+
+        ctx.name.insert(cursor, glob_decl.clone());
+        glob_decl
+    } else {
+        ctx.name.get(&cursor).unwrap().clone()
     };
 
     if new_decl {
