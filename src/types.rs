@@ -217,16 +217,18 @@ pub struct CompInfo {
     pub name: String,
     pub filename: String,
     pub members: Vec<CompMember>,
+    pub args: Vec<Type>,
     pub layout: Layout,
 }
 
 impl CompInfo {
-    pub fn new(name: String, filename: String, kind: CompKind, members: Vec<CompMember>, layout: Layout) -> CompInfo {
+    pub fn new(name: String, filename: String, kind: CompKind, members: Vec<CompMember>, args: Vec<Type>, layout: Layout) -> CompInfo {
         CompInfo {
             kind: kind,
             name: name,
             filename: filename,
             members: members,
+            args: args,
             layout: layout,
         }
     }

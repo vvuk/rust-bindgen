@@ -764,7 +764,7 @@ fn cunion_to_rs(ctx: &mut GenCtx, name: String, derive_debug: bool, layout: Layo
         })
     }
 
-    let ci = Rc::new(RefCell::new(CompInfo::new(name.clone(), name.clone(), CompKind::Union, members.clone(), layout)));
+    let ci = Rc::new(RefCell::new(CompInfo::new(name.clone(), name.clone(), CompKind::Union, members.clone(), vec!(), layout)));
     let union = TNamed(Rc::new(RefCell::new(TypeInfo::new(name.clone(), TComp(ci)))));
 
     // Nested composites may need to emit declarations and implementations as
@@ -1236,7 +1236,10 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type) -> ast::Ty {
         TComp(ref ci) => {
             let mut c = ci.borrow_mut();
             c.name = unnamed_name(ctx, c.name.clone(), c.filename.clone());
-            mk_ty(ctx, false, vec!(comp_name(c.kind, &c.name)))
+            let args = c.args.iter().map(|gt| {
+                P(cty_to_rs(ctx, gt))
+            }).collect();
+            mk_ty_args(ctx, false, vec!(comp_name(c.kind, &c.name)), args)
         },
         TEnum(ref ei) => {
             let mut e = ei.borrow_mut();
@@ -1247,7 +1250,11 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type) -> ast::Ty {
 }
 
 fn mk_ty(ctx: &GenCtx, global: bool, segments: Vec<String>) -> ast::Ty {
-    let ty = ast::TyKind::Path(
+    mk_ty_args(ctx, global, segments, vec!())
+}
+
+fn mk_ty_args(ctx: &GenCtx, global: bool, segments: Vec<String>, args: Vec<P<ast::Ty>>) -> ast::Ty {
+    let ty = ast::TyPath(
         None,
         ast::Path {
             span: ctx.span,
@@ -1255,9 +1262,9 @@ fn mk_ty(ctx: &GenCtx, global: bool, segments: Vec<String>) -> ast::Ty {
             segments: segments.iter().map(|s| {
                 ast::PathSegment {
                     identifier: ctx.ext_cx.ident_of(&s[..]),
-                    parameters: ast::PathParameters::AngleBracketed(ast::AngleBracketedParameterData {
-                        lifetimes: Vec::new(),
-                        types: OwnedSlice::empty(),
+                    parameters: ast::AngleBracketedParameters(ast::AngleBracketedParameterData {
+                        lifetimes: vec!(),
+                        types: OwnedSlice::from_vec(args.clone()),
                         bindings: OwnedSlice::empty(),
                     }),
                 }

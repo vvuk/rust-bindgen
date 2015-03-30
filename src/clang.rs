@@ -40,11 +40,7 @@ impl Cursor {
     }
 
     pub fn is_template(&self) -> bool {
-        let cur;
-        unsafe {
-            cur = Cursor { x: clang_getSpecializedCursorTemplate(self.x) };
-        }
-        cur.is_valid()
+        self.specialized().is_valid()
     }
 
     pub fn is_valid(&self) -> bool {
@@ -80,6 +76,12 @@ impl Cursor {
     pub fn canonical(&self) -> Cursor {
         unsafe {
             Cursor { x: clang_getCanonicalCursor(self.x) }
+        }
+    }
+
+    pub fn specialized(&self) -> Cursor {
+        unsafe {
+           Cursor { x: clang_getSpecializedCursorTemplate(self.x) }
         }
     }
 
@@ -221,6 +223,18 @@ impl Type {
         unsafe {
             let val = clang_Type_getAlignOf(self.x);
             if val < 0 { 0 } else { val as usize }
+        }
+    }
+
+    pub fn num_template_args(&self) -> c_int {
+        unsafe {
+            clang_Type_getNumTemplateArguments(self.x)
+        }
+    }
+
+    pub fn template_arg_type(&self, i: c_int) -> Type {
+        unsafe {
+            Type { x: clang_Type_getTemplateArgumentAsType(self.x, i) }
         }
     }
 

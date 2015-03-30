@@ -1081,8 +1081,11 @@ extern "C" {
      c_longlong;
     pub fn clang_Type_getCXXRefQualifier(T: CXType) ->
      Enum_CXRefQualifierKind;
-    pub fn clang_Cursor_isBitField(C: CXCursor) -> c_uint;
-    pub fn clang_isVirtualBase(arg1: CXCursor) -> c_uint;
+    pub fn clang_Type_getNumTemplateArguments(T: CXType) -> ::libc::c_int;
+    pub fn clang_Type_getTemplateArgumentAsType(T: CXType, i: ::libc::c_int) ->
+     CXType;
+    pub fn clang_Cursor_isBitField(C: CXCursor) -> ::libc::c_uint;
+    pub fn clang_isVirtualBase(arg1: CXCursor) -> ::libc::c_uint;
     pub fn clang_getCXXAccessSpecifier(arg1: CXCursor) ->
      Enum_CX_CXXAccessSpecifier;
     pub fn clang_getNumOverloadedDecls(cursor: CXCursor) -> c_uint;
