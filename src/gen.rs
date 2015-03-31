@@ -508,6 +508,11 @@ fn tag_dup_decl(gs: Vec<Global>) -> Vec<Global> {
               let b = ei2.borrow();
               check(&a.name[..], &b.name[..])
           },
+          (&GCompDecl(ref ei1), &GComp(ref ei2)) => {
+              let a = ei1.borrow();
+              let b = ei2.borrow();
+              check(&a.name[..], &b.name[..])
+          },
           (&GEnumDecl(ref ei1), &GEnumDecl(ref ei2)) => {
               let a = ei1.borrow();
               let b = ei2.borrow();
@@ -537,7 +542,10 @@ fn tag_dup_decl(gs: Vec<Global>) -> Vec<Global> {
 
     for i in 1..len {
         let mut dup = false;
-        for j in 0..i-1 {
+        for j in 0..len-1 {
+            if i == j {
+                continue;
+            }
             if check_dup(&gs[i], &gs[j]) {
                 dup = true;
                 break;
