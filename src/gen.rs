@@ -187,7 +187,7 @@ fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo, counts: &mut HashMap<String,
     };
 
     let mut name = v.name.clone();
-    let mut count = 1;
+    let mut count = 0;
     match counts.get(&v.name) {
         Some(x) => {
             count = *x;
@@ -195,6 +195,7 @@ fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo, counts: &mut HashMap<String,
         },
         None => ()
     }
+    count += 1;
     counts.insert(v.name.clone(), count);
 
     let item = ast::Item {
