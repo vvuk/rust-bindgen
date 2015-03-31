@@ -102,6 +102,10 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                 let ei = Rc::new(RefCell::new(EnumInfo::new(spelling, filename, kind, vec!(), layout)));
                 GEnumDecl(ei)
             }
+            CXCursor_ClassTemplate => {
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), vec!(), layout)));
+                GCompDecl(ci)
+            }
             CXCursor_ClassDecl => {
                 let args = match ty.num_template_args() {
                     -1 => vec!(),
@@ -187,14 +191,12 @@ fn conv_ptr_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor, layout:
             let decl = ty.declaration();
             if ret_ty.kind() != CXType_Invalid {
                 TFuncPtr(mk_fn_sig(ctx, ty, cursor))
-            } else if decl.kind() != CXCursor_NoDeclFound {
-                TPtr(Box::new(conv_decl_ty(ctx, &decl)), ty.is_const(), layout)
             } else if cursor.kind() == CXCursor_VarDecl {
                 let can_ty = ty.canonical_type();
                 conv_ty(ctx, &can_ty, cursor)
             } else {
-                TPtr(Box::new(TVoid), ty.is_const(), layout)
-            }
+                TPtr(Box::new(conv_decl_ty(ctx, ty)), ty.is_const(), layout)
+            };
         }
         CXType_Typedef => {
             let decl = ty.declaration();
@@ -252,30 +254,34 @@ fn mk_fn_sig(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Fu
     }
 }
 
-fn conv_decl_ty(ctx: &mut ClangParserCtx, cursor: &Cursor) -> il::Type {
-    return match cursor.kind() {
+fn conv_decl_ty(ctx: &mut ClangParserCtx, ty: &cx::Type) -> il::Type {
+    let ty_decl = &ty.declaration();
+    return match ty_decl.kind() {
         CXCursor_StructDecl |
         CXCursor_UnionDecl |
         CXCursor_ClassDecl => {
-            let decl = decl_name(ctx, cursor);
+            let decl = decl_name(ctx, ty_decl);
             let ci = decl.compinfo();
             TComp(ci)
         }
         CXCursor_EnumDecl => {
-            let decl = decl_name(ctx, cursor);
+            let decl = decl_name(ctx, ty_decl);
             let ei = decl.enuminfo();
             TEnum(ei)
         }
         CXCursor_TypedefDecl => {
-            let decl = decl_name(ctx, cursor);
+            let decl = decl_name(ctx, ty_decl);
             let ti = decl.typeinfo();
             TNamed(ti)
+        }
+        CXCursor_NoDeclFound => {
+            TNamed(Rc::new(RefCell::new(TypeInfo::new(ty.spelling().replace("const ", ""), TVoid))))
         }
         _ => {
             let fail = ctx.options.fail_on_unknown_type;
             log_err_warn(ctx,
                 format!("unsupported decl `{}` ({})",
-                    kind_to_str(cursor.kind()), cursor.location()
+                    kind_to_str(ty_decl.kind()), ty_decl.location()
                 ).as_slice(),
                 fail
             );
@@ -314,7 +320,7 @@ fn conv_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Type
         CXType_Record |
         CXType_Typedef  |
         CXType_Unexposed |
-        CXType_Enum => conv_decl_ty(ctx, &ty.declaration()),
+        CXType_Enum => conv_decl_ty(ctx, ty),
         CXType_ConstantArray => TArray(Box::new(conv_ty(ctx, &ty.elem_type(), cursor)), ty.array_size(), layout),
         _ => {
             let fail = ctx.options.fail_on_unknown_type;
@@ -346,7 +352,13 @@ fn opaque_ty(ctx: &mut ClangParserCtx, ty: &cx::Type) {
 fn visit_composite(cursor: &Cursor, parent: &Cursor,
                    ctx: &mut ClangParserCtx,
                    compinfo: &mut CompInfo) -> Enum_CXVisitorResult {
+<<<<<<< 5d460cf52c1f3f824f5e6b950ba62dd732952894
     let members = &mut compinfo.members;
+=======
+
+    let members: &mut Vec<CompMember> = &mut compinfo.members;
+    let args: &mut Vec<Type> = &mut compinfo.args;
+>>>>>>> Add support for class templates
 
     fn is_bitfield_continuation(field: &il::FieldInfo, ty: &il::Type, width: u32) -> bool {
         match (&field.bitfields, ty) {
@@ -463,6 +475,9 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
         CXCursor_PackedAttr => {
             compinfo.layout.packed = true;
         }
+        CXCursor_TemplateTypeParameter => {
+            args.push(TNamed(Rc::new(RefCell::new(TypeInfo::new(cursor.spelling(), TVoid)))));
+        }
         _ => {
             // XXX: Some kind of warning would be nice, but this produces far
             //      too many.
@@ -529,11 +544,7 @@ fn visit_top(cursor: &Cursor,
         CXCursor_UnexposedDecl => {
             return CXChildVisit_Recurse;
         }
-        CXCursor_StructDecl | CXCursor_UnionDecl | CXCursor_ClassDecl=> {
-            if cursor.is_template() {
-                return CXChildVisit_Continue;
-            }
-
+        CXCursor_StructDecl | CXCursor_UnionDecl | CXCursor_ClassDecl | CXCursor_ClassTemplate => {
             fwd_decl(ctx, cursor, |ctx_| {
                 let decl = decl_name(ctx_, cursor);
                 let ci = decl.compinfo();

@@ -303,8 +303,7 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
                 }
                 let c = ci.borrow().clone();
                 defs.extend(comp_to_rs(&mut ctx, c.kind, comp_name(c.kind, &c.name),
-                                       options.derive_debug,
-                                       c.layout, c.members).into_iter())
+                                       c.layout, c.members, c.args).into_iter())
             },
             GEnumDecl(ei) => {
                 {
@@ -597,7 +596,7 @@ fn ctypedef_to_rs(
             if is_empty {
                 ci.borrow_mut().name = name.clone();
                 let c = ci.borrow().clone();
-                comp_to_rs(ctx, c.kind, name, derive_debug, c.layout, c.members)
+                comp_to_rs(ctx, c.kind, name, c.layout, c.members, c.args)
             } else {
                 vec!(mk_item(ctx, name, ty))
             }
@@ -617,17 +616,15 @@ fn ctypedef_to_rs(
 }
 
 fn comp_to_rs(ctx: &mut GenCtx, kind: CompKind, name: String,
-              derive_debug: bool,
-              layout: Layout, members: Vec<CompMember>) -> Vec<P<ast::Item>> {
+              layout: Layout, members: Vec<CompMember>, args: Vec<Type>) -> Vec<P<ast::Item>> {
     match kind {
-        CompKind::Struct => cstruct_to_rs(ctx, name, derive_debug, layout, members),
-        CompKind::Union =>  cunion_to_rs(ctx, name, derive_debug, layout, members),
+        CompKind::Struct => cstruct_to_rs(ctx, name, layout, members, args),
+        CompKind::Union =>  cunion_to_rs(ctx, name, layout, members),
     }
 }
 
-fn cstruct_to_rs(ctx: &mut GenCtx, name: String,
-                 derive_debug: bool,
-                 layout: Layout, members: Vec<CompMember>) -> Vec<P<ast::Item>> {
+fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
+                 members: Vec<CompMember>, args: Vec<Type>) -> Vec<P<ast::Item>> {
     let mut fields = vec!();
     let mut methods = vec!();
     // Nested composites may need to emit declarations and implementations as
@@ -682,15 +679,52 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String,
                 methods.extend(gen_comp_methods(ctx, &field_name[..], 0, c.kind, &c.members, &mut extra, derive_debug).into_iter());
             } else {
                 extra.extend(comp_to_rs(ctx, c.kind, comp_name(c.kind, &c.name),
+<<<<<<< 5d460cf52c1f3f824f5e6b950ba62dd732952894
                                         derive_debug,
                                         c.layout, c.members.clone()).into_iter());
+=======
+                                        c.layout, c.members.clone(), c.args.clone()).into_iter());
+>>>>>>> Add support for class templates
             }
         }
     }
 
+<<<<<<< 5d460cf52c1f3f824f5e6b950ba62dd732952894
     let def = ast::ItemKind::Struct(
         ast::VariantData::Struct(fields, ast::DUMMY_NODE_ID),
         empty_generics()
+=======
+    let ctor_id = if fields.is_empty() { Some(ast::DUMMY_NODE_ID) } else { None };
+    let ty_params = args.iter().map(|gt| {
+        let name = match gt {
+            &TNamed(ref ti) => {
+                ctx.ext_cx.ident_of(ti.borrow().name.as_slice())
+            },
+            _ => ctx.ext_cx.ident_of("")
+        };
+        ast::TyParam {
+            ident: name,
+            id: ast::DUMMY_NODE_ID,
+            bounds: OwnedSlice::empty(),
+            default: None,
+            span: ctx.span
+        }
+    }).collect();
+
+    let def = ast::ItemStruct(
+        P(ast::StructDef {
+           fields: fields,
+           ctor_id: ctor_id,
+        }),
+        ast::Generics {
+            lifetimes: vec!(),
+            ty_params: OwnedSlice::from_vec(ty_params),
+            where_clause: ast::WhereClause {
+                id: ast::DUMMY_NODE_ID,
+                predicates: vec!()
+            }
+        }
+>>>>>>> Add support for class templates
     );
 
     let id = rust_type_id(ctx, name.clone());
@@ -948,8 +982,12 @@ fn gen_comp_methods(ctx: &mut GenCtx, data_field: &str, data_offset: usize,
 
                 let c = rc_c.borrow();
                 extra.extend(comp_to_rs(ctx, c.kind, comp_name(c.kind, &c.name),
+<<<<<<< 5d460cf52c1f3f824f5e6b950ba62dd732952894
                                         derive_debug,
                                         c.layout, c.members.clone()).into_iter());
+=======
+                                        c.layout, c.members.clone(), c.args.clone()).into_iter());
+>>>>>>> Add support for class templates
                 f.ty.size()
             }
         };
