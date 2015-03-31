@@ -259,6 +259,7 @@ fn conv_decl_ty(ctx: &mut ClangParserCtx, ty: &cx::Type) -> il::Type {
     return match ty_decl.kind() {
         CXCursor_StructDecl |
         CXCursor_UnionDecl |
+        CXCursor_ClassTemplate |
         CXCursor_ClassDecl => {
             let decl = decl_name(ctx, ty_decl);
             let ci = decl.compinfo();
