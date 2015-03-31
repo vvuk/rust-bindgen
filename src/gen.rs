@@ -519,6 +519,11 @@ fn tag_dup_decl(gs: Vec<Global>) -> Vec<Global> {
               let b = ei2.borrow();
               check(&a.name[..], &b.name[..])
           },
+          (&GCompDecl(ref ei1), &GComp(ref ei2)) => {
+              let a = ei1.borrow();
+              let b = ei2.borrow();
+              check(&a.name[..], &b.name[..])
+          },
           (&GEnumDecl(ref ei1), &GEnumDecl(ref ei2)) => {
               let a = ei1.borrow();
               let b = ei2.borrow();
@@ -547,8 +552,11 @@ fn tag_dup_decl(gs: Vec<Global>) -> Vec<Global> {
 
     for (i, gsi) in gs.iter().enumerate().skip(1) {
         let mut dup = false;
-        for gsj in gs.iter().take(i) {
-            if check_dup(&gsi, &gsj) {
+        for j in 0..len-1 {
+            if i == j {
+                continue;
+            }
+            if check_dup(&gs[i], &gs[j]) {
                 dup = true;
                 break;
             }
@@ -679,22 +687,11 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
                 methods.extend(gen_comp_methods(ctx, &field_name[..], 0, c.kind, &c.members, &mut extra, derive_debug).into_iter());
             } else {
                 extra.extend(comp_to_rs(ctx, c.kind, comp_name(c.kind, &c.name),
-<<<<<<< 5d460cf52c1f3f824f5e6b950ba62dd732952894
-                                        derive_debug,
-                                        c.layout, c.members.clone()).into_iter());
-=======
                                         c.layout, c.members.clone(), c.args.clone()).into_iter());
->>>>>>> Add support for class templates
             }
         }
     }
 
-<<<<<<< 5d460cf52c1f3f824f5e6b950ba62dd732952894
-    let def = ast::ItemKind::Struct(
-        ast::VariantData::Struct(fields, ast::DUMMY_NODE_ID),
-        empty_generics()
-=======
-    let ctor_id = if fields.is_empty() { Some(ast::DUMMY_NODE_ID) } else { None };
     let ty_params = args.iter().map(|gt| {
         let name = match gt {
             &TNamed(ref ti) => {
@@ -724,7 +721,6 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
                 predicates: vec!()
             }
         }
->>>>>>> Add support for class templates
     );
 
     let id = rust_type_id(ctx, name.clone());
@@ -982,12 +978,7 @@ fn gen_comp_methods(ctx: &mut GenCtx, data_field: &str, data_offset: usize,
 
                 let c = rc_c.borrow();
                 extra.extend(comp_to_rs(ctx, c.kind, comp_name(c.kind, &c.name),
-<<<<<<< 5d460cf52c1f3f824f5e6b950ba62dd732952894
-                                        derive_debug,
-                                        c.layout, c.members.clone()).into_iter());
-=======
                                         c.layout, c.members.clone(), c.args.clone()).into_iter());
->>>>>>> Add support for class templates
                 f.ty.size()
             }
         };
