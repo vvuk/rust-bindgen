@@ -756,8 +756,10 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
                 span: ctx.span}));
     }
 
-    items.push(mk_clone_impl(ctx, &name[..]));
-    items.push(mk_default_impl(ctx, &name[..]));
+    if args.is_empty() {
+        items.push(mk_clone_impl(ctx, &name[..]));
+        items.push(mk_default_impl(ctx, &name[..]));
+    }
     items.extend(extra.into_iter());
     items
 }
