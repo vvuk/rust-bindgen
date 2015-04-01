@@ -205,7 +205,7 @@ fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo, counts: &mut HashMap<String,
         node: ast::ItemFn(
             P(fndecl),
             ast::Unsafety::Unsafe,
-            abi::Rust,
+            abi::C,
             empty_generics(),
             P(block)
         ),
