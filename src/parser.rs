@@ -380,13 +380,8 @@ fn opaque_ty(ctx: &mut ClangParserCtx, ty: &cx::Type) {
 fn visit_composite(cursor: &Cursor, parent: &Cursor,
                    ctx: &mut ClangParserCtx,
                    compinfo: &mut CompInfo) -> Enum_CXVisitorResult {
-<<<<<<< 5d460cf52c1f3f824f5e6b950ba62dd732952894
-    let members = &mut compinfo.members;
-=======
-
     let members: &mut Vec<CompMember> = &mut compinfo.members;
     let args: &mut Vec<Type> = &mut compinfo.args;
->>>>>>> Add support for class templates
 
     fn is_bitfield_continuation(field: &il::FieldInfo, ty: &il::Type, width: u32) -> bool {
         match (&field.bitfields, ty) {

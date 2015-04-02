@@ -633,14 +633,14 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
     let mut unnamed: u32 = 0;
     let mut bitfields: u32 = 0;
 
-    // Debug is only defined on little arrays
-    let mut can_derive_debug = derive_debug;
-
-    for m in &members {
-        let (opt_rc_c, opt_f) = match *m {
-            CompMember::Field(ref f) => { (None, Some(f)) }
-            CompMember::Comp(ref rc_c) => { (Some(rc_c), None) }
-            CompMember::CompField(ref rc_c, ref f) => { (Some(rc_c), Some(f)) }
+    let id = rust_type_id(ctx, name.clone());
+    let id_ty = P(mk_ty(ctx, false, vec!(id.clone())));
+    let mut setters = vec!();
+    for m in members.iter() {
+        let (opt_rc_c, opt_f) = match m {
+            &CompMember::Field(ref f) => { (None, Some(f)) }
+            &CompMember::Comp(ref rc_c) => { (Some(rc_c), None) }
+            &CompMember::CompField(ref rc_c, ref f) => { (Some(rc_c), Some(f)) }
         };
 
         if let Some(f) = opt_f {
@@ -652,8 +652,12 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
                 None => rust_type_id(ctx, f.name.clone())
             };
 
-            if !f.ty.can_derive_debug() {
-                can_derive_debug = false;
+            let mut offset: u32 = 0;
+            if let Some(ref bitfields) = f.bitfields {
+                for &(ref bf_name, bf_size) in bitfields.iter() {
+                    setters.push(gen_bitfield_method(ctx, &f_name, bf_name, &f.ty, offset as usize, bf_size as usize));
+                    offset += bf_size;
+                }
             }
 
             let f_ty = P(cty_to_rs(ctx, &f.ty));
@@ -681,6 +685,23 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
                                         c.layout, c.members.clone(), c.args.clone()).into_iter());
             }
         }
+    }
+    if !setters.is_empty() {
+        extra.push(P(ast::Item {
+            ident: ctx.ext_cx.ident_of(""),
+            attrs: vec!(),
+            id: ast::DUMMY_NODE_ID,
+            node: ast::ItemImpl(
+                ast::Unsafety::Normal,
+                ast::ImplPolarity::Positive,
+                empty_generics(),
+                None,
+                id_ty.clone(),
+                setters
+            ),
+            vis: ast::Inherited,
+            span: ctx.span
+        }));
     }
 
     let ty_params = args.iter().map(|gt| {
@@ -714,11 +735,6 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
         }
     );
 
-    let id = rust_type_id(ctx, name.clone());
-    let mut attrs = vec!(mk_repr_attr(ctx, layout), mk_deriving_copy_attr(ctx, false));
-    if can_derive_debug {
-        attrs.push(mk_deriving_debug_attr(ctx));
-    }
     let struct_def = P(ast::Item { ident: ctx.ext_cx.ident_of(&id[..]),
         attrs: attrs,
         id: ast::DUMMY_NODE_ID,
@@ -734,7 +750,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
             ast::ImplPolarity::Positive,
             empty_generics(),
             None,
-            P(mk_ty(ctx, false, vec!(id))),
+            id_ty,
             methods
         );
         items.push(
@@ -981,6 +997,30 @@ fn gen_comp_methods(ctx: &mut GenCtx, data_field: &str, data_offset: usize,
         }
     }
     methods
+}
+
+fn gen_bitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
+                       field_name: &String, field_type: &Type,
+                       offset: usize, width: usize) -> ast::ImplItem {
+    let input_type = if width > 16 {
+        ctx.ext_cx.ident_of("u32")
+    } else if width > 8 {
+        ctx.ext_cx.ident_of("u16")
+    } else if width > 1 {
+        ctx.ext_cx.ident_of("u8")
+    } else {
+        ctx.ext_cx.ident_of("bool")
+    };
+
+    let field_type = cty_to_rs(ctx, &field_type);
+    let setter_name = ctx.ext_cx.ident_of(format!("set_{}", field_name).as_slice());
+    let bindgen_ident = ctx.ext_cx.ident_of(bindgen_name.as_slice());
+    ast::MethodImplItem(quote_method!(&ctx.ext_cx,
+        pub fn $setter_name(&mut self, val: $input_type) {
+            self.$bindgen_ident &= !(((1 << $width) - 1) << $offset);
+            self.$bindgen_ident |= (val as $field_type) << $offset;
+        }
+    ))
 }
 
 // Implements std::default::Default using std::mem::zeroed.
