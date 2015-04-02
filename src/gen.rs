@@ -82,20 +82,8 @@ fn rust_type_id(ctx: &mut GenCtx, name: String) -> String {
         s.push_str(&name[..]);
         s
     } else {
-        match name.as_slice() {
-            "int8_t" => "i8".to_string(),
-            "uint8_t" => "u8".to_string(),
-            "int16_t" => "i16".to_string(),
-            "uint16_t" => "u16".to_string(),
-            "int32_t" => "i32".to_string(),
-            "uint32_t" => "u32".to_string(),
-            "int64_t" => "i64".to_string(),
-            "uint64_t" => "u64".to_string(),
-            _ => {
-                let (n, _) = rust_id(ctx, name);
-                n
-            }
-        }
+        let (n, _) = rust_id(ctx, name);
+        n
     }
 }
 
@@ -1230,20 +1218,20 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type) -> ast::Ty {
                 };
                 mk_ty(ctx, false, vec!(ty_name.to_owned()))
             },
-            ISChar => mk_ty(ctx, true, raw("c_char")),
-            IUChar => mk_ty(ctx, true, raw("c_uchar")),
-            IInt => mk_ty(ctx, true, raw("c_int")),
-            IUInt => mk_ty(ctx, true, raw("c_uint")),
-            IShort => mk_ty(ctx, true, raw("c_short")),
-            IUShort => mk_ty(ctx, true, raw("c_ushort")),
-            ILong => mk_ty(ctx, true, raw("c_long")),
-            IULong => mk_ty(ctx, true, raw("c_ulong")),
-            ILongLong => mk_ty(ctx, true, raw("c_longlong")),
-            IULongLong => mk_ty(ctx, true, raw("c_ulonglong"))
+            ISChar |
+            IInt |
+            IShort |
+            ILong |
+            ILongLong => mk_ty(ctx, false, vec!(format!("i{}", layout.size * 8))),
+            IUChar |
+            IUInt |
+            IUShort |
+            IULong |
+            IULongLong => mk_ty(ctx, false, vec!(format!("u{}", layout.size * 8))),
         },
-        TFloat(f, _) => match f {
-            FFloat => mk_ty(ctx, true, raw("c_float")),
-            FDouble => mk_ty(ctx, true, raw("c_double"))
+        &TFloat(f, _) => match f {
+            FFloat => mk_ty(ctx, true, vec!("f32".to_string())),
+            FDouble => mk_ty(ctx, true, vec!("f64".to_string()))
         },
         TPtr(ref t, is_const, _) => {
             let id = cty_to_rs(ctx, &**t);
