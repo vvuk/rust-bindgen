@@ -637,10 +637,17 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
     let id_ty = P(mk_ty(ctx, false, vec!(id.clone())));
     let mut setters = vec!();
     for m in members.iter() {
+        if let &CompMember::Enum(ref ei) = m {
+            let e = ei.borrow().clone();
+            extra.extend(cenum_to_rs(ctx, format!("{}_{}", name, e.name), e.kind, e.items).into_iter());
+            continue;
+        }
+
         let (opt_rc_c, opt_f) = match m {
             &CompMember::Field(ref f) => { (None, Some(f)) }
             &CompMember::Comp(ref rc_c) => { (Some(rc_c), None) }
             &CompMember::CompField(ref rc_c, ref f) => { (Some(rc_c), Some(f)) }
+            _ => unreachable!()
         };
 
         if let Some(f) = opt_f {
@@ -991,6 +998,7 @@ fn gen_comp_methods(ctx: &mut GenCtx, data_field: &str, data_offset: usize,
                                         c.layout, c.members.clone(), c.args.clone()).into_iter());
                 f.ty.size()
             }
+            &CompMember::Enum(_) => 0
         };
         match kind {
             CompKind::Struct => { offset += advance_by; }

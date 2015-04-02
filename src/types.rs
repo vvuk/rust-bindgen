@@ -203,6 +203,7 @@ pub enum CompMember {
     Field(FieldInfo),
     Comp(Rc<RefCell<CompInfo>>),
     CompField(Rc<RefCell<CompInfo>>, FieldInfo),
+    Enum(Rc<RefCell<EnumInfo>>),
 }
 
 #[derive(Copy, Clone, PartialEq)]
