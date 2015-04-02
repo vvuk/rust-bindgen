@@ -1211,8 +1211,8 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type) -> ast::Ty {
             IULongLong => mk_ty(ctx, false, vec!(format!("u{}", layout.size * 8))),
         },
         &TFloat(f, _) => match f {
-            FFloat => mk_ty(ctx, true, vec!("f32".to_string())),
-            FDouble => mk_ty(ctx, true, vec!("f64".to_string()))
+            FFloat => mk_ty(ctx, false, vec!("f32".to_string())),
+            FDouble => mk_ty(ctx, false, vec!("f64".to_string()))
         },
         &TPtr(ref t, is_const, _) => {
             let id = cty_to_rs(ctx, &**t);
