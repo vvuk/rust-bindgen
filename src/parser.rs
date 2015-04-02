@@ -497,6 +497,17 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
         CXCursor_TemplateTypeParameter => {
             args.push(TNamed(Rc::new(RefCell::new(TypeInfo::new(cursor.spelling(), TVoid)))));
         }
+        CXCursor_EnumDecl => {
+            fwd_decl(ctx, cursor, |ctx_| {
+                let decl = decl_name(ctx_, cursor);
+                let ei = decl.enuminfo();
+                cursor.visit(|c, _: &Cursor| {
+                    let mut ei_ = ei.borrow_mut();
+                    visit_enum(c, &mut ei_.items)
+                });
+                members.push(CompMember::Enum(ei));
+            });
+        }
         _ => {
             // XXX: Some kind of warning would be nice, but this produces far
             //      too many.
