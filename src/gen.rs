@@ -631,7 +631,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
             let f_name = match f.bitfields {
                 Some(_) => {
                     bitfields += 1;
-                    format!("_bindgen_bitfield_{}_", bitfields)
+                    format!("_bitfield_{}", bitfields)
                 }
                 None => rust_type_id(ctx, f.name.clone())
             };
