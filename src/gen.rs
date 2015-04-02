@@ -655,9 +655,10 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
             let mut offset: u32 = 0;
             if let Some(ref bitfields) = f.bitfields {
                 for &(ref bf_name, bf_size) in bitfields.iter() {
-                    setters.push(gen_bitfield_method(ctx, &f_name, bf_name, &f.ty, offset as usize, bf_size as usize));
+                    setters.push(gen_bitfield_method(ctx, &f_name, bf_name, &f.ty, offset as usize, bf_size));
                     offset += bf_size;
                 }
+                setters.push(gen_fullbitfield_method(ctx, &f_name, &f.ty, bitfields))
             }
 
             let f_ty = P(cty_to_rs(ctx, &f.ty));
@@ -999,19 +1000,23 @@ fn gen_comp_methods(ctx: &mut GenCtx, data_field: &str, data_offset: usize,
     methods
 }
 
+fn type_for_bitfield_width(ctx: &mut GenCtx, width: u32) -> ast::Ty {
+    let input_type = if width > 16 {
+        "u32"
+    } else if width > 8 {
+        "u16"
+    } else if width > 1 {
+        "u8"
+    } else {
+        "bool"
+    };
+    mk_ty(ctx, false, vec!(input_type.to_string()))
+}
+
 fn gen_bitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
                        field_name: &String, field_type: &Type,
-                       offset: usize, width: usize) -> ast::ImplItem {
-    let input_type = if width > 16 {
-        ctx.ext_cx.ident_of("u32")
-    } else if width > 8 {
-        ctx.ext_cx.ident_of("u16")
-    } else if width > 1 {
-        ctx.ext_cx.ident_of("u8")
-    } else {
-        ctx.ext_cx.ident_of("bool")
-    };
-
+                       offset: usize, width: u32) -> ast::ImplItem {
+    let input_type = type_for_bitfield_width(ctx, width);
     let field_type = cty_to_rs(ctx, &field_type);
     let setter_name = ctx.ext_cx.ident_of(format!("set_{}", field_name).as_slice());
     let bindgen_ident = ctx.ext_cx.ident_of(bindgen_name.as_slice());
@@ -1021,6 +1026,74 @@ fn gen_bitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
             self.$bindgen_ident |= (val as $field_type) << $offset;
         }
     ))
+}
+
+fn gen_fullbitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
+                           field_type: &Type, bitfields: &Vec<(String, u32)>) -> ast::ImplItem {
+    let field_type = cty_to_rs(ctx, field_type);
+    let mut args = vec!();
+    for &(ref name, width) in bitfields.iter() {
+        args.push(ast::Arg {
+            ty: P(type_for_bitfield_width(ctx, width)),
+            pat: P(ast::Pat {
+                id: ast::DUMMY_NODE_ID,
+                node: ast::PatIdent(
+                    ast::BindByValue(ast::MutImmutable),
+                    respan(ctx.span, ctx.ext_cx.ident_of(name.as_slice())),
+                    None
+                ),
+                span: ctx.span
+            }),
+            id: ast::DUMMY_NODE_ID,
+        });
+    }
+
+    let fndecl = ast::FnDecl {
+        inputs: args,
+        output: ast::Return(P(field_type.clone())),
+        variadic: false
+    };
+
+    let mut stmts = Vec::with_capacity(bitfields.len() + 1);
+
+    stmts.push(quote_stmt!(&ctx.ext_cx,
+        let _bitfield_val_ = 0;
+    ));
+
+    let mut offset = 0;
+    for &(ref name, width) in bitfields.iter() {
+        let name_ident = ctx.ext_cx.ident_of(name.as_slice());
+        stmts.push(quote_stmt!(&ctx.ext_cx,
+            _bitfield_val_ |= ($name_ident as $field_type) << $offset;
+        ));
+        offset += width;
+    }
+
+    let block = ast::Block {
+        stmts: stmts,
+        expr: Some(quote_expr!(&ctx.ext_cx,
+            _bitfield_val_
+        )),
+        id: ast::DUMMY_NODE_ID,
+        rules: ast::DefaultBlock,
+        span: ctx.span
+    };
+
+    ast::MethodImplItem(P(ast::Method {
+        attrs: vec!(),
+        id: ast::DUMMY_NODE_ID,
+        span: ctx.span,
+        node: ast::MethDecl(
+            ctx.ext_cx.ident_of(format!("new{}", bindgen_name).as_slice()),
+            empty_generics(),
+            abi::Rust,
+            respan(ctx.span, ast::SelfStatic),
+            ast::Unsafety::Normal,
+            P(fndecl),
+            P(block),
+            ast::Public
+        )
+    }))
 }
 
 // Implements std::default::Default using std::mem::zeroed.
