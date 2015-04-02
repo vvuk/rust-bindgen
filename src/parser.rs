@@ -288,6 +288,32 @@ fn conv_decl_ty(ctx: &mut ClangParserCtx, ty: &cx::Type) -> il::Type {
 
 fn conv_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Type {
     debug!("conv_ty: ty=`{}` sp=`{}` loc=`{}`", type_to_str(ty.kind()), cursor.spelling(), cursor.location());
+
+    if ty.kind() == CXType_Typedef {
+        let cty = ty.canonical_type();
+        match cty.kind() {
+            CXType_Bool |
+            CXType_SChar |
+            CXType_Char_S |
+            CXType_UChar |
+            CXType_Char_U |
+            CXType_WChar |
+            CXType_Char16 |
+            CXType_UShort |
+            CXType_UInt |
+            CXType_ULong |
+            CXType_ULongLong |
+            CXType_Short |
+            CXType_Int |
+            CXType_Long |
+            CXType_LongLong |
+            CXType_Float |
+            CXType_Double |
+            CXType_LongDouble => return conv_ty(ctx, &cty, cursor),
+            _ => ()
+        }
+    }
+
     let layout = Layout::new(ty.size(), ty.align());
     return match ty.kind() {
         CXType_Void | CXType_Invalid => TVoid,
