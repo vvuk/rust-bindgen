@@ -2,6 +2,7 @@
 
 use libc::{c_uint, c_char, c_int, c_ulong};
 use std::{mem, ptr};
+use std::io;
 use std::fmt;
 use std::str;
 use std::ffi::CStr;
@@ -369,7 +370,7 @@ impl fmt::Display for String_ {
         unsafe {
             let c_str = clang_getCString(self.x) as *const c_char;
             let p = c_str as *const _;
-            str::from_utf8(CStr::from_ptr(p).to_bytes()).unwrap().to_string().fmt(f)
+            f.write_str(&String::from_utf8_lossy(CStr::from_ptr(p).to_bytes()))
         }
     }
 }
@@ -411,13 +412,12 @@ pub struct TranslationUnit {
 impl TranslationUnit {
     pub fn parse(ix: &Index, file: &str, cmd_args: &[String],
                  unsaved: &[UnsavedFile], opts: ::libc::c_uint) -> TranslationUnit {
-        let _fname = CString::new(file.as_bytes()).unwrap();
-        let fname = _fname.as_ptr();
-        let _c_args: Vec<CString> = cmd_args.iter().map(|s| CString::new(s.as_bytes()).unwrap()).collect();
+        let fname = CString::new(file).unwrap();
+        let _c_args: Vec<CString> = cmd_args.iter().map(|s| CString::new(s.clone()).unwrap()).collect();
         let c_args: Vec<*const c_char> = _c_args.iter().map(|s| s.as_ptr()).collect();
         let mut c_unsaved: Vec<Struct_CXUnsavedFile> = unsaved.iter().map(|f| f.x).collect();
         let tu = unsafe {
-            clang_parseTranslationUnit(ix.x, fname,
+            clang_parseTranslationUnit(ix.x, fname.as_ptr(),
                                        c_args.as_ptr(),
                                        c_args.len() as c_int,
                                        c_unsaved.as_mut_ptr(),
@@ -527,8 +527,8 @@ pub struct UnsavedFile {
 
 impl UnsavedFile {
     pub fn new(name: &str, contents: &str) -> UnsavedFile {
-        let name = CString::new(name.as_bytes()).unwrap();
-        let contents = CString::new(contents.as_bytes()).unwrap();
+        let name = CString::new(name).unwrap();
+        let contents = CString::new(contents).unwrap();
         let x = Struct_CXUnsavedFile {
             Filename: name.as_ptr(),
             Contents: contents.as_ptr(),
@@ -778,7 +778,7 @@ pub fn ast_dump(c: &Cursor, depth: isize)-> Enum_CXVisitorResult {
     print_indent(depth, &format!("({} {} {}",
         kind_to_str(c.kind()),
         c.spelling(),
-        type_to_str(ct))[..]
+        type_to_str(ct))
     );
     c.visit(| s, _: &Cursor| {
         ast_dump(s, depth + 1)

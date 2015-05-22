@@ -16,6 +16,9 @@ syntex_syntax = "0.7.*"
 [features]
 static = []
 
+[dependencies]
+log = "*"
+
 [lib]
 
 name = "bindgen"

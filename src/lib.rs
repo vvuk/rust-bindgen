@@ -1,9 +1,11 @@
 #![crate_name = "bindgen"]
 #![crate_type = "dylib"]
+#![feature(convert, collections)]
 
 extern crate syntex_syntax as syntax;
 extern crate libc;
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
 use std::collections::HashSet;
 use std::default::Default;
@@ -223,7 +225,7 @@ fn parse_headers(options: &BindgenOptions, logger: &Logger) -> Result<Vec<Global
         match_pat: options.match_pat.clone(),
         emit_ast: options.emit_ast,
         fail_on_unknown_type: options.fail_on_unknown_type,
-        override_enum_ty: str_to_ikind(&options.override_enum_ty[..]),
+        override_enum_ty: str_to_ikind(&options.override_enum_ty),
         clang_args: options.clang_args.clone(),
     };
 
