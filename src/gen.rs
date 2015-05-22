@@ -190,7 +190,13 @@ fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo, counts: &mut HashMap<String,
 
     let item = ast::Item {
         ident: ctx.ext_cx.ident_of(&name),
-        attrs: vec!(),
+        attrs: vec!(respan(ctx.span, ast::Attribute_ {
+            id: mk_attr_id(),
+            style: ast::AttrOuter,
+            value: P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "inline".to_string()))
+            )),
+            is_sugared_doc: false
+        })),
         id: ast::DUMMY_NODE_ID,
         node: ast::ItemFn(
             P(fndecl),
