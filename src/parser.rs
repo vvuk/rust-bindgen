@@ -513,6 +513,16 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
                 members.push(CompMember::Enum(ei));
             });
         }
+        CXCursor_CXXBaseSpecifier => {
+            let ty = conv_ty(ctx, &cursor.cur_type(), cursor);
+            let fieldname = if members.len() > 0 {
+                format!("_base{}", members.len())
+            } else {
+                "_base".to_string()
+            };
+            let field = FieldInfo::new(fieldname, ty.clone(), None);
+            members.push(CompMember::Field(field));
+        }
         _ => {
             // XXX: Some kind of warning would be nice, but this produces far
             //      too many.
