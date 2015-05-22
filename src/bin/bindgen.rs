@@ -2,7 +2,9 @@
 #![crate_type = "bin"]
 
 extern crate bindgen;
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
+extern crate syntax;
 
 use bindgen::{Bindings, BindgenOptions, LinkType, Logger};
 use std::io;
@@ -47,7 +49,7 @@ fn parse_args(args: &[String]) -> ParseResult {
             options.links.push((args[ix][2..].to_string(), LinkType::Default));
             ix += 1;
         } else {
-            match &args[ix][..] {
+            match &*args[ix] {
                 "--help" | "-h" => {
                     return ParseResult::CmdUsage;
                 }
@@ -129,7 +131,7 @@ fn parse_args(args: &[String]) -> ParseResult {
 }
 
 fn print_usage(bin: String) {
-    let mut s = format!("Usage: {} [options] input.h", &bin[..]);
+    let mut s = format!("Usage: {} [options] input.h", &bin);
     s.push_str(
 "
 Options:
@@ -163,14 +165,22 @@ Options:
     Options other than stated above are passed to clang.
 "
     );
-    print!("{}", &s[..]);
+    println!("{}", &s);
 }
 
 pub fn main() {
     let mut bind_args: Vec<_> = env::args().collect();
     let bin = bind_args.remove(0);
 
-    match parse_args(&bind_args[..]) {
+    match bindgen::get_include_dir() {
+        Some(path) => {
+            bind_args.push("-I".to_owned());
+            bind_args.push(path);
+        }
+        None => (),
+    }
+
+    match parse_args(&bind_args) {
         ParseResult::ParseErr(e) => panic!(e),
         ParseResult::CmdUsage => print_usage(bin),
         ParseResult::ParseOk(options, out) => {
@@ -179,7 +189,7 @@ pub fn main() {
                 Ok(bindings) => match bindings.write(out) {
                     Ok(()) => (),
                     Err(e) => {
-                        logger.error(&format!("Unable to write bindings to file. {}", e)[..]);
+                        logger.error(&format!("Unable to write bindings to file. {}", e));
                         exit(-1);
                     }
                 },
