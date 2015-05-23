@@ -158,6 +158,13 @@ impl Cursor {
             clang_Cursor_getNumArguments(self.x)
         }
     }
+
+    // CXX method
+    pub fn method_is_static(&self) -> bool {
+        unsafe {
+            clang_CXXMethod_isStatic(self.x) != 0
+        }
+    }
 }
 
 extern fn visit_children(cur: CXCursor, parent: CXCursor,

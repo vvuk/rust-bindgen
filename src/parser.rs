@@ -75,11 +75,11 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
         };
         let glob_decl = match cursor.kind() {
             CXCursor_StructDecl => {
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), vec!(), layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), vec!(), vec!(), layout)));
                 GCompDecl(ci)
             }
             CXCursor_UnionDecl => {
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Union, vec!(), vec!(), layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Union, vec!(), vec!(), vec!(), layout)));
                 GCompDecl(ci)
             }
             CXCursor_EnumDecl => {
@@ -103,7 +103,7 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                 GEnumDecl(ei)
             }
             CXCursor_ClassTemplate => {
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), vec!(), layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), vec!(), vec!(), layout)));
                 GCompDecl(ci)
             }
             CXCursor_ClassDecl => {
@@ -118,7 +118,7 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                         list
                     }
                 };
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), args, layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), args, vec!(), layout)));
                 GCompDecl(ci)
             }
             CXCursor_TypedefDecl => {
@@ -216,7 +216,7 @@ fn conv_ptr_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor, layout:
 
 fn mk_fn_sig(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::FuncSig {
     let args_lst: Vec<(String, il::Type)> = match cursor.kind() {
-        CXCursor_FunctionDecl => {
+        CXCursor_FunctionDecl | CXCursor_CXXMethod => {
             // For CXCursor_FunctionDecl, cursor.args() is the reliable way to
             // get parameter names and types.
             cursor.args().iter().map(|arg| {
@@ -270,7 +270,7 @@ fn conv_decl_ty(ctx: &mut ClangParserCtx, ty: &cx::Type) -> il::Type {
             let ti = decl.typeinfo();
             TNamed(ti)
         }
-        CXCursor_NoDeclFound => {
+        CXCursor_NoDeclFound | CXCursor_TypeAliasDecl => {
             TNamed(Rc::new(RefCell::new(TypeInfo::new(ty.spelling().replace("const ", ""), TVoid))))
         }
         _ => {
@@ -378,6 +378,7 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
 
     let members: &mut Vec<CompMember> = &mut compinfo.members;
     let args: &mut Vec<Type> = &mut compinfo.args;
+    let methods: &mut Vec<VarInfo> = &mut ci.methods;
 
     fn is_bitfield_continuation(field: &il::FieldInfo, ty: &il::Type, width: u32) -> bool {
         match (&field.bitfields, ty) {
@@ -518,6 +519,28 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
             };
             let field = FieldInfo::new(fieldname, ty.clone(), None);
             members.push(CompMember::Field(field));
+        }
+        CXCursor_CXXMethod => {
+            let linkage = cursor.linkage();
+            if linkage != CXLinkage_External {
+                return CXChildVisit_Continue;
+            }
+
+            if args.len() > 0 {
+                return CXChildVisit_Continue;
+            }
+
+            let spelling = cursor.spelling();
+            if spelling.len() > 8 &&
+               &(spelling)[..8] == "operator" {
+                return CXChildVisit_Continue;
+            }
+
+            let sig = mk_fn_sig(ctx, &cursor.cur_type(), cursor);
+            let mut vi = VarInfo::new(spelling, cursor.mangling(), TFuncPtr(sig));
+            vi.is_static = cursor.method_is_static();
+            vi.is_const = cursor.cur_type().is_const();
+            methods.push(vi);
         }
         _ => {
             // XXX: Some kind of warning would be nice, but this produces far
