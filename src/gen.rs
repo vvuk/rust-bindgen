@@ -211,6 +211,126 @@ fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo, counts: &mut HashMap<String,
     P(item)
 }
 
+fn gen_unmangle_method(ctx: &mut GenCtx,
+                       v: &VarInfo,
+                       counts: &mut HashMap<String, isize>,
+                       explicit_self: ast::ExplicitSelf_)
+                       -> P<ast::ImplItem> {
+    let fndecl;
+    let mut args = vec!();
+
+    match explicit_self {
+        ast::SelfStatic => (),
+        ast::SelfRegion(_, mutable, ident) => {
+            let selfexpr = match mutable {
+                ast::MutImmutable => quote_expr!(&ctx.ext_cx, &*self),
+                ast::MutMutable => quote_expr!(&ctx.ext_cx, &mut *self),
+            };
+            args.push(selfexpr);
+        },
+        _ => unreachable!()
+    }
+
+    match v.ty {
+        TFuncPtr(ref sig) => {
+            fndecl = cfuncty_to_rs(ctx,
+                                   &*sig.ret_ty, sig.args.as_slice(),
+                                   false);
+            let mut unnamed: usize = 0;
+            let iter = if args.len() > 0 {
+                sig.args[1..].iter()
+            } else {
+                sig.args.iter()
+            };
+            for arg in iter {
+                let (ref n, _) = *arg;
+                let argname = if n.is_empty() {
+                    unnamed += 1;
+                    format!("arg{}", unnamed)
+                } else {
+                    rust_id(ctx, n.clone()).0
+                };
+                let expr = ast::Expr {
+                    id: ast::DUMMY_NODE_ID,
+                    node: ast::ExprPath(None, ast::Path {
+                        span: ctx.span,
+                        global: false,
+                        segments: vec!(ast::PathSegment {
+                            identifier: ctx.ext_cx.ident_of(&argname),
+                            parameters: ast::PathParameters::none()
+                        })
+                    }),
+                    span: ctx.span
+                };
+                args.push(P(expr));
+            }
+        },
+        _ => unreachable!()
+    };
+
+    let sig = ast::MethodSig {
+        unsafety: ast::Unsafety::Unsafe,
+        abi: abi::C,
+        decl: P(fndecl),
+        generics: empty_generics(),
+        explicit_self: respan(ctx.span, explicit_self),
+    };
+
+    let block = ast::Block {
+        stmts: vec!(),
+        expr: Some(P(ast::Expr {
+            id: ast::DUMMY_NODE_ID,
+            node: ast::ExprCall(
+                P(ast::Expr {
+                    id: ast::DUMMY_NODE_ID,
+                    node: ast::ExprPath(None, ast::Path {
+                        span: ctx.span,
+                        global: false,
+                        segments: vec!(ast::PathSegment {
+                            identifier: ctx.ext_cx.ident_of(&v.mangled),
+                            parameters: ast::PathParameters::none()
+                        })
+                    }),
+                    span: ctx.span
+                }),
+                args
+            ),
+            span: ctx.span
+        })),
+        id: ast::DUMMY_NODE_ID,
+        rules: ast::DefaultBlock,
+        span: ctx.span
+    };
+
+    let mut name = v.name.clone();
+    let mut count = 0;
+    match counts.get(&v.name) {
+        Some(x) => {
+            count = *x;
+            name.push_str(&x.to_string());
+        },
+        None => ()
+    }
+    count += 1;
+    counts.insert(v.name.clone(), count);
+
+    let item = ast::ImplItem {
+        id: ast::DUMMY_NODE_ID,
+        ident: ctx.ext_cx.ident_of(&name),
+        vis: ast::Public,
+        attrs: vec!(respan(ctx.span, ast::Attribute_ {
+            id: mk_attr_id(),
+            style: ast::AttrOuter,
+            value: P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "inline".to_string()))
+            )),
+            is_sugared_doc: false
+        })),
+        node: ast::MethodImplItem(sig, P(block)),
+        span: ctx.span
+    };
+    P(item)
+}
+
 pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> Vec<P<ast::Item>> {
     // Create a dummy ExtCtxt. We only need this for string interning and that uses TLS.
     let mut features = Features::new();
@@ -297,8 +417,8 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
                     c.name = unnamed_name(&mut ctx, c.name.clone(), c.filename.clone());
                 }
                 let c = ci.borrow().clone();
-                defs.extend(comp_to_rs(&mut ctx, c.kind, comp_name(c.kind, &c.name),
-                                       c.layout, c.members, c.args).into_iter())
+                defs.extend(comp_to_rs(&mut ctx, comp_name(c.kind, &c.name),
+                                       c).into_iter())
             },
             GEnumDecl(ei) => {
                 {
@@ -456,6 +576,28 @@ fn mk_extern(ctx: &mut GenCtx, links: &[(String, LinkType)],
     })
 }
 
+fn mk_impl(ctx: &mut GenCtx, ty: P<ast::Ty>,
+           items: Vec<P<ast::ImplItem>>)
+           -> P<ast::Item> {
+    let ext = ast::ItemImpl(
+        ast::Unsafety::Normal,
+        ast::ImplPolarity::Positive,
+        empty_generics(),
+        None,
+        ty,
+        items
+    );
+
+    P(ast::Item {
+        ident: ctx.ext_cx.ident_of(""),
+        attrs: vec!(),
+        id: ast::DUMMY_NODE_ID,
+        node: ext,
+        vis: ast::Inherited,
+        span: ctx.span
+    })
+}
+
 fn remove_redundant_decl(gs: Vec<Global>) -> Vec<Global> {
     fn check_decl(a: &Global, ty: &Type) -> bool {
         match *a {
@@ -601,7 +743,7 @@ fn ctypedef_to_rs(
             if is_empty {
                 ci.borrow_mut().name = name.clone();
                 let c = ci.borrow().clone();
-                comp_to_rs(ctx, c.kind, name, c.layout, c.members, c.args)
+                comp_to_rs(ctx, name, c)
             } else {
                 vec!(mk_item(ctx, name, ty))
             }
@@ -620,16 +762,19 @@ fn ctypedef_to_rs(
     }
 }
 
-fn comp_to_rs(ctx: &mut GenCtx, kind: CompKind, name: String,
-              layout: Layout, members: Vec<CompMember>, args: Vec<Type>) -> Vec<P<ast::Item>> {
-    match kind {
-        CompKind::Struct => cstruct_to_rs(ctx, name, layout, members, args),
-        CompKind::Union =>  cunion_to_rs(ctx, name, layout, members),
+fn comp_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo)
+              -> Vec<P<ast::Item>> {
+    match ci.kind {
+        CompKind::Struct => cstruct_to_rs(ctx, name, ci),
+        CompKind::Union =>  cunion_to_rs(ctx, name, ci.layout, ci.members),
     }
 }
 
-fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
-                 members: Vec<CompMember>, args: Vec<Type>) -> Vec<P<ast::Item>> {
+fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Item>> {
+    let layout = &ci.layout;
+    let members = &ci.members;
+    let args = &ci.args;
+    let methodlist = &ci.methods;
     let mut fields = vec!();
     let mut methods = vec!();
     // Nested composites may need to emit declarations and implementations as
@@ -695,8 +840,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
                 fields.push(mk_blob_field(ctx, &field_name, c.layout));
                 methods.extend(gen_comp_methods(ctx, &field_name, 0, c.kind, &c.members, &mut extra).into_iter());
             } else {
-                extra.extend(comp_to_rs(ctx, c.kind, comp_name(c.kind, &c.name),
-                                        c.layout, c.members.clone(), c.args.clone()).into_iter());
+                extra.extend(comp_to_rs(ctx, comp_name(c.kind, &c.name), c.clone()).into_iter());
             }
         }
     }
@@ -764,7 +908,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
             ast::ImplPolarity::Positive,
             empty_generics(),
             None,
-            id_ty,
+            id_ty.clone(),
             methods
         );
         items.push(
@@ -782,6 +926,43 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, layout: Layout,
         items.push(mk_default_impl(ctx, &name));
     }
     items.extend(extra.into_iter());
+
+    let mut mangledlist = vec!();
+    let mut unmangledlist = vec!();
+    let mut unmangle_count: HashMap<String, isize> = HashMap::new();
+    for v in methodlist {
+        let mut v = v.clone();
+        match v.ty {
+            TFuncPtr(ref mut sig) => {
+                if !v.is_static {
+                    sig.args.insert(0, ("this".to_string(),
+                                        TPtr(Box::new(TComp(Rc::new(RefCell::new(ci.clone())))), v.is_const, Layout::zero())));
+                }
+            }
+            _ => unreachable!()
+        }
+        match v.ty {
+            TFuncPtr(ref sig) => {
+                let name = v.mangled.clone();
+                let explicit_self = if v.is_static {
+                    ast::SelfStatic
+                } else if v.is_const {
+                    ast::SelfRegion(None, ast::MutImmutable, ctx.ext_cx.ident_of("self"))
+                } else {
+                    ast::SelfRegion(None, ast::MutMutable, ctx.ext_cx.ident_of("self"))
+                };
+                unmangledlist.push(gen_unmangle_method(ctx, &v, &mut unmangle_count, explicit_self));
+                mangledlist.push(cfunc_to_rs(ctx, name,
+                                             &*sig.ret_ty, sig.args.as_slice(),
+                                             sig.is_variadic, ast::Inherited));
+            }
+            _ => unreachable!()
+        }
+    }
+    if mangledlist.len() > 0 {
+        items.push(mk_extern(ctx, &vec!(), mangledlist, abi::C));
+        items.push(mk_impl(ctx, id_ty, unmangledlist));
+    }
     items
 }
 
@@ -816,7 +997,7 @@ fn cunion_to_rs(ctx: &mut GenCtx, name: String, derive_debug: bool, layout: Layo
         })
     }
 
-    let ci = Rc::new(RefCell::new(CompInfo::new(name.clone(), name.clone(), CompKind::Union, members.clone(), vec!(), layout)));
+    let ci = Rc::new(RefCell::new(CompInfo::new(name.clone(), name.clone(), CompKind::Union, members.clone(), vec!(), vec!(), layout)));
     let union = TNamed(Rc::new(RefCell::new(TypeInfo::new(name.clone(), TComp(ci)))));
 
     // Nested composites may need to emit declarations and implementations as
@@ -999,8 +1180,7 @@ fn gen_comp_methods(ctx: &mut GenCtx, data_field: &str, data_offset: usize,
                 methods.extend(mk_field_method(ctx, f, offset).into_iter());
 
                 let c = rc_c.borrow();
-                extra.extend(comp_to_rs(ctx, c.kind, comp_name(c.kind, &c.name),
-                                        c.layout, c.members.clone(), c.args.clone()).into_iter());
+                extra.extend(comp_to_rs(ctx, comp_name(c.kind, &c.name), c.clone()).into_iter());
                 f.ty.size()
             }
             &CompMember::Enum(_) => 0
