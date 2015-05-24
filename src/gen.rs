@@ -1537,13 +1537,13 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type) -> ast::Ty {
             ISChar |
             IInt |
             IShort |
-            ILong |
             ILongLong => mk_ty(ctx, false, vec!(format!("i{}", layout.size * 8))),
             IUChar |
             IUInt |
             IUShort |
-            IULong |
             IULongLong => mk_ty(ctx, false, vec!(format!("u{}", layout.size * 8))),
+            ILong => mk_ty(ctx, true, vec!("libc".to_string(), "c_long".to_string())),
+            IULong => mk_ty(ctx, true, vec!("libc".to_string(), "c_ulong".to_string())),
         },
         &TFloat(f, _) => match f {
             FFloat => mk_ty(ctx, false, vec!("f32".to_string())),
