@@ -681,7 +681,7 @@ fn tag_dup_decl(gs: Vec<Global>) -> Vec<Global> {
 
     for i in 1..len {
         let mut dup = false;
-        for j in 0..len-1 {
+        for j in 0..i {
             if i == j {
                 continue;
             }
