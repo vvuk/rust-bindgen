@@ -269,14 +269,16 @@ impl EnumItem {
 #[derive(Clone, PartialEq)]
 pub struct TypeInfo {
     pub name: String,
-    pub ty: Type
+    pub ty: Type,
+    pub layout: Layout,
 }
 
 impl TypeInfo {
-    pub fn new(name: String, ty: Type) -> TypeInfo {
+    pub fn new(name: String, ty: Type, layout: Layout) -> TypeInfo {
         TypeInfo {
             name: name,
-            ty: ty
+            ty: ty,
+            layout: layout,
         }
     }
 }

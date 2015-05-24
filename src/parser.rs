@@ -122,7 +122,7 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                 GCompDecl(ci)
             }
             CXCursor_TypedefDecl => {
-                let ti = Rc::new(RefCell::new(TypeInfo::new(spelling, TVoid)));
+                let ti = Rc::new(RefCell::new(TypeInfo::new(spelling, TVoid, layout)));
                 GType(ti)
             }
             CXCursor_VarDecl => {
@@ -271,7 +271,8 @@ fn conv_decl_ty(ctx: &mut ClangParserCtx, ty: &cx::Type) -> il::Type {
             TNamed(ti)
         }
         CXCursor_NoDeclFound | CXCursor_TypeAliasDecl => {
-            TNamed(Rc::new(RefCell::new(TypeInfo::new(ty.spelling().replace("const ", ""), TVoid))))
+            let layout = Layout::new(ty.size(), ty.align());
+            TNamed(Rc::new(RefCell::new(TypeInfo::new(ty.spelling().replace("const ", ""), TVoid, layout))))
         }
         _ => {
             let fail = ctx.options.fail_on_unknown_type;
@@ -360,6 +361,11 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
             (&Some(ref bitfields), &il::TInt(_, layout)) if *ty == field.ty => {
                 let iter = bitfields.iter().map(|&(_, w)| w);
                 iter.sum::<u32>() + width <= (layout.size * 8) as u32
+            },
+            (&Some(ref bitfields), &il::TNamed(ref info)) if *ty == field.ty => {
+                let info = info.borrow();
+                let iter = bitfields.iter().map(|&(_, w)| w);
+                iter.sum::<u32>() + width <= (info.layout.size * 8) as u32
             },
             _ => false
         }
@@ -472,7 +478,9 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
             compinfo.layout.packed = true;
         }
         CXCursor_TemplateTypeParameter => {
-            args.push(TNamed(Rc::new(RefCell::new(TypeInfo::new(cursor.spelling(), TVoid)))));
+            let ty = conv_ty(ctx, &cursor.cur_type(), cursor);
+            let layout = Layout::new(ty.size(), ty.align());
+            args.push(TNamed(Rc::new(RefCell::new(TypeInfo::new(cursor.spelling(), TVoid, layout)))));
         }
         CXCursor_EnumDecl => {
             fwd_decl(ctx, cursor, |ctx_| {
