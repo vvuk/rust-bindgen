@@ -28,7 +28,7 @@ mod clang;
 mod gen;
 mod parser;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Builder<'a> {
     options: BindgenOptions,
     logger: Option<&'a Logger>
@@ -131,7 +131,7 @@ impl Default for BindgenOptions {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LinkType {
     Default,
     Static,
@@ -143,7 +143,7 @@ pub trait Logger {
     fn warn(&self, msg: &str);
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Bindings {
     module: ast::Mod
 }
