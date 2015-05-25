@@ -28,7 +28,7 @@ impl Logger for StdLogger {
 
 enum ParseResult {
     CmdUsage,
-    ParseOk(BindgenOptions, Box<io::Write+'static>),
+    ParseOk(BindgenOptions, Box<io::Write>),
     ParseErr(String)
 }
 
