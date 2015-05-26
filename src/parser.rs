@@ -75,11 +75,11 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
         };
         let glob_decl = match cursor.kind() {
             CXCursor_StructDecl => {
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), vec!(), vec!(), layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), layout)));
                 GCompDecl(ci)
             }
             CXCursor_UnionDecl => {
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Union, vec!(), vec!(), vec!(), layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Union, vec!(), layout)));
                 GCompDecl(ci)
             }
             CXCursor_EnumDecl => {
@@ -103,7 +103,7 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                 GEnumDecl(ei)
             }
             CXCursor_ClassTemplate => {
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), vec!(), vec!(), layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), layout)));
                 GCompDecl(ci)
             }
             CXCursor_ClassDecl => {
@@ -118,7 +118,8 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                         list
                     }
                 };
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), args, vec!(), layout)));
+                let mut ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), layout)));
+                ci.borrow_mut().args = args;
                 GCompDecl(ci)
             }
             CXCursor_TypedefDecl => {
@@ -379,7 +380,7 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
         CXCursor_FieldDecl => {
             let ty = conv_ty(ctx, &cursor.cur_type(), cursor);
 
-            let (name, bitfields) = match (cursor.bit_width(), members.last_mut()) {
+            let (name, bitfields) = match (cursor.bit_width(), ci.members.last_mut()) {
                 // The field is a continuation of an exising bitfield
                 (Some(width), Some(&mut il::CompMember::Field(ref mut field)))
                     if is_bitfield_continuation(field, &ty, width) => {
@@ -446,7 +447,7 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
                 }
             }
 
-            let is_composite = match (inner_composite(&ty), members.last()) {
+            let is_composite = match (inner_composite(&ty), ci.members.last()) {
                 (Some(ty_compinfo), Some(&CompMember::Comp(ref c))) => {
                     c.borrow().deref() as *const _ == ty_compinfo.borrow().deref() as *const _
                 },
@@ -455,13 +456,13 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
 
             let field = FieldInfo::new(name, ty.clone(), bitfields);
             if is_composite {
-                if let Some(CompMember::Comp(c)) = members.pop() {
-                    members.push(CompMember::CompField(c, field));
+                if let Some(CompMember::Comp(c)) = ci.members.pop() {
+                    ci.members.push(CompMember::CompField(c, field));
                 } else {
                     unreachable!(); // Checks in is_composite make this unreachable.
                 }
             } else {
-                members.push(CompMember::Field(field));
+                ci.members.push(CompMember::Field(field));
             }
         }
         CXCursor_StructDecl | CXCursor_UnionDecl => {
@@ -470,12 +471,12 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
                 // cannot be used elsewhere and so does not need to be added
                 // to globals otherwise it will be declared later and a global.
                 let decl = decl_name(ctx_, cursor);
-                let ci = decl.compinfo();
+                let ci2 = decl.compinfo();
                 cursor.visit(|c, p| {
-                    let mut ci_ = ci.borrow_mut();
+                    let mut ci_ = ci2.borrow_mut();
                     visit_composite(c, p, ctx_, &mut ci_)
                 });
-                members.push(CompMember::Comp(decl.compinfo()));
+                ci.members.push(CompMember::Comp(decl.compinfo()));
             });
         }
         CXCursor_PackedAttr => {
@@ -484,7 +485,7 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
         CXCursor_TemplateTypeParameter => {
             let ty = conv_ty(ctx, &cursor.cur_type(), cursor);
             let layout = Layout::new(ty.size(), ty.align());
-            args.push(TNamed(Rc::new(RefCell::new(TypeInfo::new(cursor.spelling(), TVoid, layout)))));
+            ci.args.push(TNamed(Rc::new(RefCell::new(TypeInfo::new(cursor.spelling(), TVoid, layout)))));
         }
         CXCursor_EnumDecl => {
             fwd_decl(ctx, cursor, |ctx_| {
@@ -494,18 +495,35 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
                     let mut ei_ = ei.borrow_mut();
                     visit_enum(c, &mut ei_.items)
                 });
-                members.push(CompMember::Enum(ei));
+                ci.members.push(CompMember::Enum(ei));
             });
         }
         CXCursor_CXXBaseSpecifier => {
             let ty = conv_ty(ctx, &cursor.cur_type(), cursor);
-            let fieldname = if members.len() > 0 {
-                format!("_base{}", members.len())
+            let fieldname = if ci.members.len() > 0 {
+                format!("_base{}", ci.members.len())
             } else {
                 "_base".to_string()
             };
+            let found_virtual_base = if ci.members.is_empty() {
+                false
+            } else if let CompMember::Field(ref fi) = ci.members[0] {
+                if let TComp(ref ci2) = fi.ty {
+                    ci2.borrow().has_vtable
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
             let field = FieldInfo::new(fieldname, ty.clone(), None);
-            members.push(CompMember::Field(field));
+            if !found_virtual_base && cursor.is_virtual_base() {
+                ci.members.insert(0, CompMember::Field(field));
+                ci.has_vtable = true;
+            } else {
+                ci.members.push(CompMember::Field(field));
+            }
+            ci.base_members += 1;
         }
         CXCursor_CXXMethod => {
             let linkage = cursor.linkage();
@@ -513,7 +531,7 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
                 return CXChildVisit_Continue;
             }
 
-            if args.len() > 0 {
+            if ci.args.len() > 0 {
                 return CXChildVisit_Continue;
             }
 
@@ -523,11 +541,59 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
                 return CXChildVisit_Continue;
             }
 
-            let sig = mk_fn_sig(ctx, &cursor.cur_type(), cursor);
-            let mut vi = VarInfo::new(spelling, cursor.mangling(), TFuncPtr(sig));
+            fn is_override(ci: &CompInfo, sig: &Type, name: &str) -> bool {
+                for vm in ci.vmethods.iter() {
+                    if vm.name == name && &vm.ty == sig {
+                        return true;
+                    }
+                }
+                for base in ci.members[..ci.base_members].iter() {
+                    let base = match base {
+                        &CompMember::Field(ref fi) => {
+                            match fi.ty {
+                                TComp(ref ci) => ci.clone(),
+                                _ => continue,
+                            }
+                        },
+                        _ => unreachable!()
+                    };
+                    if is_override(&*base.borrow(), sig, name) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            if cursor.method_is_virtual() {
+                ci.has_vtable = true;
+            }
+
+            let mut sig = mk_fn_sig(ctx, &cursor.cur_type(), cursor);
+            if !cursor.method_is_static() {
+                // XXX what have i done
+                if cursor.method_is_virtual() {
+                    sig.args.insert(0, ("this".to_string(),TPtr(Box::new(TVoid), cursor.cur_type().is_const(), Layout::zero())));
+                } else {
+                    sig.args.insert(0, ("this".to_string(),
+                                        TPtr(Box::new(TNamed(Rc::new(RefCell::new(TypeInfo::new(ci.name.clone(), TVoid, Layout::zero()))))), cursor.cur_type().is_const(), Layout::zero())));
+                }
+            }
+
+            // XXX with final classes we can optimize a bit
+            let sig = TFuncPtr(sig);
+            if is_override(ci, &sig, &spelling) {
+                return CXChildVisit_Continue;
+            }
+
+            let mut vi = VarInfo::new(spelling, cursor.mangling(), sig);
             vi.is_static = cursor.method_is_static();
             vi.is_const = cursor.cur_type().is_const();
-            methods.push(vi);
+
+            if cursor.method_is_virtual() {
+                ci.vmethods.push(vi);
+            } else {
+                ci.methods.push(vi);
+            }
         }
         _ => {
             // XXX: Some kind of warning would be nice, but this produces far

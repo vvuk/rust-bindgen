@@ -165,6 +165,19 @@ impl Cursor {
             clang_CXXMethod_isStatic(self.x) != 0
         }
     }
+
+    pub fn method_is_virtual(&self) -> bool {
+        unsafe {
+            clang_CXXMethod_isVirtual(self.x) != 0
+        }
+    }
+
+    // CXX base
+    pub fn is_virtual_base(&self) -> bool {
+        unsafe {
+            clang_isVirtualBase(self.x) != 0
+        }
+    }
 }
 
 extern fn visit_children(cur: CXCursor, parent: CXCursor,
