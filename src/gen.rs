@@ -782,6 +782,83 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
 
     let id = rust_type_id(ctx, name.clone());
     let id_ty = P(mk_ty(ctx, false, vec!(id.clone())));
+
+    if ci.has_vtable {
+        let mut vffields = vec!();
+        let base_vftable = if !members.is_empty() {
+            if let CompMember::Field(ref fi) = members[0] {
+                match fi.ty {
+                    TComp(ref ci2) => {
+                        let ci2 = ci2.borrow();
+                        if ci2.has_vtable {
+                            Some(format!("_vftable_{}", ci2.name))
+                        } else {
+                            None
+                        }
+                    },
+                    _ => None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if let Some(ref base) = base_vftable {
+            let field = ast::StructField_ {
+                kind: ast::NamedField(ctx.ext_cx.ident_of("_base"), ast::Public),
+                id: ast::DUMMY_NODE_ID,
+                ty: P(mk_ty_args(ctx, false, vec!(base.clone()), vec!())),
+                attrs: vec!(),
+            };
+            vffields.push(respan(ctx.span, field));
+        }
+
+        for vm in ci.vmethods.iter() {
+            let ty = match vm.ty {
+                TFuncPtr(ref sig) => {
+                    let decl = cfuncty_to_rs(ctx, &*sig.ret_ty, sig.args.as_slice(), sig.is_variadic);
+                    mk_fn_proto_ty(ctx, &decl, sig.abi)
+                },
+                _ => unreachable!()
+            };
+            let field = ast::StructField_ {
+                kind: ast::NamedField(ctx.ext_cx.ident_of(&vm.name), ast::Public),
+                id: ast::DUMMY_NODE_ID,
+                ty: P(ty),
+                attrs: vec!(),
+            };
+            vffields.push(respan(ctx.span, field));
+        }
+
+        let vf_name = format!("_vftable_{}", name);
+        let item = ast::Item {
+            ident: ctx.ext_cx.ident_of(&vf_name),
+            attrs: vec!(mk_repr_attr(ctx)),
+            id: ast::DUMMY_NODE_ID,
+            node: ast::ItemStruct(
+                P(ast::StructDef {
+                    fields: vffields,
+                    ctor_id: None,
+                }), empty_generics()
+            ),
+            vis: ast::Public,
+            span: ctx.span,
+        };
+        extra.push(P(item));
+
+        if base_vftable == None {
+            let vf_type = mk_ty_args(ctx, false, vec!(vf_name), vec!());
+            fields.push(respan(ctx.span, ast::StructField_ {
+                kind: ast::NamedField(ctx.ext_cx.ident_of("_vftable"), ast::Public),
+                id: ast::DUMMY_NODE_ID,
+                ty: P(mk_ptrty(ctx, &vf_type, true)),
+                attrs: Vec::new()
+            }));
+        }
+    }
+
     let mut setters = vec!();
     for m in members.iter() {
         if let &CompMember::Enum(ref ei) = m {
@@ -930,15 +1007,6 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
     for v in methodlist {
         let mut v = v.clone();
         match v.ty {
-            TFuncPtr(ref mut sig) => {
-                if !v.is_static {
-                    sig.args.insert(0, ("this".to_string(),
-                                        TPtr(Box::new(TComp(Rc::new(RefCell::new(ci.clone())))), v.is_const, Layout::zero())));
-                }
-            }
-            _ => unreachable!()
-        }
-        match v.ty {
             TFuncPtr(ref sig) => {
                 let name = v.mangled.clone();
                 let explicit_self = if v.is_static {
@@ -994,7 +1062,7 @@ fn cunion_to_rs(ctx: &mut GenCtx, name: String, layout: Layout, members: Vec<Com
         });
     }
 
-    let ci = Rc::new(RefCell::new(CompInfo::new(name.clone(), name.clone(), CompKind::Union, members.clone(), vec!(), vec!(), layout)));
+    let ci = Rc::new(RefCell::new(CompInfo::new(name.clone(), name.clone(), CompKind::Union, members.clone(), layout)));
     let union = TNamed(Rc::new(RefCell::new(TypeInfo::new(name.clone(), TComp(ci), layout))));
 
     // Nested composites may need to emit declarations and implementations as

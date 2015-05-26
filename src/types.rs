@@ -184,18 +184,24 @@ pub struct CompInfo {
     pub members: Vec<CompMember>,
     pub args: Vec<Type>,
     pub methods: Vec<VarInfo>,
+    pub vmethods: Vec<VarInfo>,
+    pub has_vtable: bool,
+    pub base_members: usize,
     pub layout: Layout,
 }
 
 impl CompInfo {
-    pub fn new(name: String, filename: String, kind: CompKind, members: Vec<CompMember>, args: Vec<Type>, methods: Vec<VarInfo>, layout: Layout) -> CompInfo {
+    pub fn new(name: String, filename: String, kind: CompKind, members: Vec<CompMember>, layout: Layout) -> CompInfo {
         CompInfo {
             kind: kind,
             name: name,
             filename: filename,
             members: members,
-            args: args,
-            methods: methods,
+            args: vec!(),
+            methods: vec!(),
+            vmethods: vec!(),
+            has_vtable: false,
+            base_members: 0,
             layout: layout,
         }
     }
