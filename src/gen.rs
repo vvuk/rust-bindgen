@@ -213,6 +213,7 @@ fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo, counts: &mut HashMap<String,
         node: ast::ItemFn(
             P(fndecl),
             ast::Unsafety::Unsafe,
+            ast::Constness::NotConst,
             abi::C,
             empty_generics(),
             P(block)
@@ -286,6 +287,7 @@ fn gen_unmangle_method(ctx: &mut GenCtx,
         decl: P(fndecl),
         generics: empty_generics(),
         explicit_self: respan(ctx.span, explicit_self),
+        constness: ast::Constness::NotConst,
     };
 
     let block = ast::Block {
@@ -1366,6 +1368,7 @@ fn gen_fullbitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
             decl: P(fndecl),
             generics: empty_generics(),
             explicit_self: respan(ctx.span, ast::SelfStatic),
+            constness: ast::Constness::NotConst,
         }, P(block)
     );
 
