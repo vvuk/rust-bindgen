@@ -1005,7 +1005,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
     let mut unmangledlist = vec!();
     let mut unmangle_count: HashMap<String, isize> = HashMap::new();
     for v in methodlist {
-        let mut v = v.clone();
+        let v = v.clone();
         match v.ty {
             TFuncPtr(ref sig) => {
                 let name = v.mangled.clone();

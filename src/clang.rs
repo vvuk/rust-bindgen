@@ -2,10 +2,7 @@
 
 use libc::{c_uint, c_char, c_int, c_ulong};
 use std::{mem, ptr};
-use std::io;
 use std::fmt;
-use std::str;
-use std::ffi::CStr;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::ffi::CString;

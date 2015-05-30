@@ -1,7 +1,6 @@
 #![allow(non_upper_case_globals)]
 
 use std::collections::{HashMap, HashSet};
-use std::collections::hash_map;
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
