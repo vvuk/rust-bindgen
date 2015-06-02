@@ -1609,7 +1609,7 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type) -> ast::Ty {
         TInt(i, ref layout) => match i {
             IBool => {
                 let ty_name = match layout.size {
-                    1 => "u8",
+                    1 => "bool",
                     2 => "u16",
                     4 => "u32",
                     8 => "u64",
