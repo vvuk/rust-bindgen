@@ -179,11 +179,11 @@ fn get_abi(cc: Enum_CXCallingConv) -> abi::Abi {
     }
 }
 
-fn conv_ptr_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor, layout: Layout) -> il::Type {
+fn conv_ptr_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor, is_ref: bool, layout: Layout) -> il::Type {
     let is_const = ty.is_const();
     match ty.kind() {
         CXType_Void => {
-            TPtr(Box::new(TVoid), is_const, layout)
+            return TPtr(Box::new(TVoid), is_const, is_ref, layout)
         }
         CXType_Unexposed |
         CXType_FunctionProto |
@@ -196,7 +196,7 @@ fn conv_ptr_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor, layout:
                 let can_ty = ty.canonical_type();
                 conv_ty(ctx, &can_ty, cursor)
             } else {
-                TPtr(Box::new(conv_decl_ty(ctx, ty)), ty.is_const(), layout)
+                TPtr(Box::new(conv_decl_ty(ctx, ty)), ty.is_const(), is_ref, layout)
             };
         }
         CXType_Typedef => {
@@ -204,12 +204,12 @@ fn conv_ptr_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor, layout:
             let def_ty = decl.typedef_type();
             if def_ty.kind() == CXType_FunctionProto ||
                def_ty.kind() == CXType_FunctionNoProto {
-                TPtr(Box::new(conv_ptr_ty(ctx, &def_ty, cursor, layout)), is_const, layout)
+                return TPtr(Box::new(conv_ptr_ty(ctx, &def_ty, cursor, is_ref, layout)), is_const, is_ref, layout);
             } else {
-                TPtr(Box::new(conv_ty(ctx, ty, cursor)), is_const, layout)
+                return TPtr(Box::new(conv_ty(ctx, ty, cursor)), is_const, is_ref, layout);
             }
         }
-        _ => TPtr(Box::new(conv_ty(ctx, ty, cursor)), is_const, layout),
+        _ => return TPtr(Box::new(conv_ty(ctx, ty, cursor)), is_const, is_ref, layout),
     }
 }
 
@@ -317,9 +317,10 @@ fn conv_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Type
         CXType_Float => TFloat(FFloat, layout),
         CXType_Double => TFloat(FDouble, layout),
         CXType_LongDouble => TFloat(FDouble, layout),
-        CXType_Pointer | CXType_LValueReference => conv_ptr_ty(ctx, &ty.pointee_type(), cursor, layout),
+        CXType_Pointer => conv_ptr_ty(ctx, &ty.pointee_type(), cursor, false, layout),
+        CXType_LValueReference => conv_ptr_ty(ctx, &ty.pointee_type(), cursor, true, layout),
         CXType_VariableArray | CXType_DependentSizedArray | CXType_IncompleteArray => {
-            conv_ptr_ty(ctx, &ty.elem_type(), cursor, layout)
+            conv_ptr_ty(ctx, &ty.elem_type(), cursor, false, layout)
         }
         CXType_FunctionProto => TFuncProto(mk_fn_sig(ctx, ty, cursor)),
         CXType_Record |
@@ -438,10 +439,10 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
 
             fn inner_composite(mut ty: &il::Type) -> Option<&Rc<RefCell<CompInfo>>> {
                 loop {
-                    match *ty {
-                        TComp(ref comp_ty) => return Some(comp_ty),
-                        TPtr(ref ptr_ty, _, _) => ty = &**ptr_ty,
-                        TArray(ref array_ty, _, _) => ty = &**array_ty,
+                    match ty {
+                        &TComp(ref comp_ty) => return Some(comp_ty),
+                        &TPtr(ref ptr_ty, _, _, _) => ty = &**ptr_ty,
+                        &TArray(ref array_ty, _, _) => ty = &**array_ty,
                         _ => return None
                     }
                 }
@@ -572,10 +573,10 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
             if !cursor.method_is_static() {
                 // XXX what have i done
                 if cursor.method_is_virtual() {
-                    sig.args.insert(0, ("this".to_string(),TPtr(Box::new(TVoid), cursor.cur_type().is_const(), Layout::zero())));
+                    sig.args.insert(0, ("this".to_string(),TPtr(Box::new(TVoid), cursor.cur_type().is_const(), false, Layout::zero())));
                 } else {
                     sig.args.insert(0, ("this".to_string(),
-                                        TPtr(Box::new(TNamed(Rc::new(RefCell::new(TypeInfo::new(ci.name.clone(), TVoid, Layout::zero()))))), cursor.cur_type().is_const(), Layout::zero())));
+                                        TPtr(Box::new(TNamed(Rc::new(RefCell::new(TypeInfo::new(ci.name.clone(), TVoid, Layout::zero()))))), cursor.cur_type().is_const(), false, Layout::zero())));
                 }
             }
 

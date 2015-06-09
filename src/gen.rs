@@ -1221,7 +1221,7 @@ fn gen_comp_methods(ctx: &mut GenCtx, data_field: &str, data_offset: usize,
         if f.bitfields.is_some() { return None; }
 
         let (f_name, _) = rust_id(ctx, f.name.clone());
-        let ret_ty = P(cty_to_rs(ctx, &TPtr(Box::new(f.ty.clone()), false, Layout::zero()), true));
+        let ret_ty = P(cty_to_rs(ctx, &TPtr(Box::new(f.ty.clone()), false, false, Layout::zero()), true));
 
         // When the offset is zero, generate slightly prettier code.
         let method = {
@@ -1538,6 +1538,9 @@ fn cfuncty_to_rs(ctx: &mut GenCtx,
 
     let ret = match *rty {
         TVoid => ast::DefaultReturn(ctx.span),
+        // Disable references in returns for now
+        TPtr(ref t, is_const, _, ref layout) =>
+            ast::Return(P(cty_to_rs(ctx, &TPtr(t.clone(), is_const, false, layout.clone()), true))),
         _ => ast::Return(P(cty_to_rs(ctx, rty, true)))
     };
 
@@ -1558,7 +1561,7 @@ fn cfuncty_to_rs(ctx: &mut GenCtx,
         // (if any) are those specified within the [ and ] of the array type
         // derivation.
         let arg_ty = P(match t {
-            &TArray(ref typ, _, ref l) => cty_to_rs(ctx, &TPtr(typ.clone(), false, l.clone()), true),
+            &TArray(ref typ, _, ref l) => cty_to_rs(ctx, &TPtr(typ.clone(), false, false, l.clone()), true),
             _ => cty_to_rs(ctx, t, true),
         });
 
@@ -1643,9 +1646,13 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
             FFloat => mk_ty(ctx, false, vec!("f32".to_string())),
             FDouble => mk_ty(ctx, false, vec!("f64".to_string()))
         },
-        &TPtr(ref t, is_const, _) => {
+        &TPtr(ref t, is_const, is_ref, _) => {
             let id = cty_to_rs(ctx, &**t, allow_bool);
-            mk_ptrty(ctx, &id, is_const)
+            if is_ref {
+                mk_refty(ctx, &id, is_const)
+            } else {
+                mk_ptrty(ctx, &id, is_const)
+            }
         },
         &TArray(ref t, s, _) => {
             let ty = cty_to_rs(ctx, &**t, allow_bool);
@@ -1722,6 +1729,22 @@ fn mk_ptrty(ctx: &mut GenCtx, base: &ast::Ty, is_const: bool) -> ast::Ty {
         node: ty,
         span: ctx.span
     }
+}
+
+fn mk_refty(ctx: &mut GenCtx, base: &ast::Ty, is_const: bool) -> ast::Ty {
+    let ty = ast::TyRptr(
+        None,
+        ast::MutTy {
+            ty: P(base.clone()),
+            mutbl: if is_const { ast::MutImmutable } else { ast::MutMutable }
+        }
+    );
+
+    return ast::Ty {
+        id: ast::DUMMY_NODE_ID,
+        node: ty,
+        span: ctx.span
+    };
 }
 
 fn mk_arrty(ctx: &GenCtx, base: &ast::Ty, n: usize) -> ast::Ty {
