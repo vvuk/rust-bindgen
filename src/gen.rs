@@ -200,13 +200,15 @@ fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo, counts: &mut HashMap<String,
 
     let item = ast::Item {
         ident: ctx.ext_cx.ident_of(&name),
-        attrs: vec!(respan(ctx.span, ast::Attribute_ {
-            id: mk_attr_id(),
-            style: ast::AttrOuter,
-            value: P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "inline".to_string()))
-            )),
-            is_sugared_doc: false
-        })),
+        attrs: vec!(mk_doc_attr(ctx, v.comment.clone()),
+            respan(ctx.span, ast::Attribute_ {
+                id: mk_attr_id(),
+                style: ast::AttrOuter,
+                value: P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "inline".to_string()))
+                )),
+                is_sugared_doc: false
+            }
+        )),
         id: ast::DUMMY_NODE_ID,
         node: ast::ItemFn(
             P(fndecl),
@@ -330,13 +332,15 @@ fn gen_unmangle_method(ctx: &mut GenCtx,
         id: ast::DUMMY_NODE_ID,
         ident: ctx.ext_cx.ident_of(&name),
         vis: ast::Public,
-        attrs: vec!(respan(ctx.span, ast::Attribute_ {
-            id: mk_attr_id(),
-            style: ast::AttrOuter,
-            value: P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "inline".to_string()))
-            )),
-            is_sugared_doc: false
-        })),
+        attrs: vec!(mk_doc_attr(ctx, v.comment.clone()),
+            respan(ctx.span, ast::Attribute_ {
+                id: mk_attr_id(),
+                style: ast::AttrOuter,
+                value: P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "inline".to_string()))
+                )),
+                is_sugared_doc: false
+            }
+        )),
         node: ast::MethodImplItem(sig, P(block)),
         span: ctx.span
     };
@@ -903,7 +907,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
                 ),
                 id: ast::DUMMY_NODE_ID,
                 ty: f_ty,
-                attrs: Vec::new()
+                attrs: vec!()
             }));
         }
 
@@ -970,7 +974,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
     );
 
     let struct_def = P(ast::Item { ident: ctx.ext_cx.ident_of(&id),
-        attrs: vec!(mk_repr_attr(ctx, layout), mk_deriving_copy_attr(ctx)),
+        attrs: vec!(mk_doc_attr(ctx, ci.comment), mk_repr_attr(ctx, layout), mk_deriving_copy_attr(ctx)),
         id: ast::DUMMY_NODE_ID,
         node: def,
         vis: ast::Public,
@@ -1064,7 +1068,7 @@ fn cunion_to_rs(ctx: &mut GenCtx, name: String, layout: Layout, members: Vec<Com
         });
     }
 
-    let ci = Rc::new(RefCell::new(CompInfo::new(name.clone(), name.clone(), CompKind::Union, members.clone(), layout)));
+    let ci = Rc::new(RefCell::new(CompInfo::new(name.clone(), name.clone(), "".to_owned(), CompKind::Union, members.clone(), layout)));
     let union = TNamed(Rc::new(RefCell::new(TypeInfo::new(name.clone(), TComp(ci), layout))));
 
     // Nested composites may need to emit declarations and implementations as
@@ -1442,6 +1446,23 @@ fn mk_deriving_copy_attr(ctx: &mut GenCtx) -> ast::Attribute {
     })
 }
 
+fn mk_doc_attr(ctx: &mut GenCtx, doc: String) -> ast::Attribute {
+    let attr_val = P(respan(ctx.span, ast::MetaNameValue(
+        to_intern_str(ctx, "doc".to_string()),
+        respan(ctx.span, ast::LitStr(
+            to_intern_str(ctx, doc),
+            ast::CookedStr,
+        ))
+    )));
+
+    respan(ctx.span, ast::Attribute_ {
+        id: mk_attr_id(),
+        style: ast::AttrOuter,
+        value: attr_val,
+        is_sugared_doc: true
+    })
+}
+
 fn cvar_to_rs(ctx: &mut GenCtx, name: String,
                                 ty: &Type,
                                 is_const: bool) -> P<ast::ForeignItem> {
@@ -1518,7 +1539,9 @@ fn cfuncty_to_rs(ctx: &mut GenCtx,
     };
 }
 
-fn cfunc_to_rs(ctx: &mut GenCtx, name: String, rty: &Type,
+fn cfunc_to_rs(ctx: &mut GenCtx,
+               name: String,
+               rty: &Type,
                aty: &[(String, Type)],
                var: bool,
                vis: ast::Visibility) -> P<ast::ForeignItem> {
@@ -1530,7 +1553,7 @@ fn cfunc_to_rs(ctx: &mut GenCtx, name: String, rty: &Type,
 
     let (rust_name, was_mangled) = rust_id(ctx, name.clone());
 
-    let mut attrs = Vec::new();
+    let mut attrs = vec!();
     if was_mangled {
         attrs.push(mk_link_name_attr(ctx, name));
     }

@@ -181,6 +181,7 @@ pub struct CompInfo {
     pub kind: CompKind,
     pub name: String,
     pub filename: String,
+    pub comment: String,
     pub members: Vec<CompMember>,
     pub args: Vec<Type>,
     pub methods: Vec<VarInfo>,
@@ -191,11 +192,12 @@ pub struct CompInfo {
 }
 
 impl CompInfo {
-    pub fn new(name: String, filename: String, kind: CompKind, members: Vec<CompMember>, layout: Layout) -> CompInfo {
+    pub fn new(name: String, filename: String, comment: String, kind: CompKind, members: Vec<CompMember>, layout: Layout) -> CompInfo {
         CompInfo {
             kind: kind,
             name: name,
             filename: filename,
+            comment: comment,
             members: members,
             args: vec!(),
             methods: vec!(),
@@ -299,6 +301,7 @@ impl fmt::Debug for TypeInfo {
 pub struct VarInfo {
     pub name: String,
     pub mangled: String,
+    pub comment: String,
     pub ty: Type,
     //TODO: support non-integer constants
     pub val: Option<i64>,
@@ -307,10 +310,11 @@ pub struct VarInfo {
 }
 
 impl VarInfo {
-    pub fn new(name: String, mangled: String, ty: Type) -> VarInfo {
+    pub fn new(name: String, mangled: String, comment: String, ty: Type) -> VarInfo {
         VarInfo {
             name: name,
             mangled: mangled,
+            comment: comment,
             ty: ty,
             val: None,
             is_const: false,

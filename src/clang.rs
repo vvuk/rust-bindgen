@@ -59,6 +59,12 @@ impl Cursor {
         }
     }
 
+    pub fn raw_comment(&self) -> String {
+        unsafe {
+            String_ { x: clang_Cursor_getRawCommentText(self.x) }.to_string()
+        }
+    }
+
     pub fn cur_type(&self) -> Type {
         unsafe {
             Type { x: clang_getCursorType(self.x) }

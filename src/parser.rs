@@ -65,6 +65,7 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
 
     let decl = if new_decl {
         let spelling = cursor.spelling();
+        let comment = cursor.raw_comment();
         let (file, _, _, _) = cursor.location().location();
         let ty = cursor.cur_type();
         let layout = Layout::new(ty.size(), ty.align());
@@ -74,11 +75,11 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
         };
         let glob_decl = match cursor.kind() {
             CXCursor_StructDecl => {
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, comment, CompKind::Struct, vec!(), layout)));
                 GCompDecl(ci)
             }
             CXCursor_UnionDecl => {
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Union, vec!(), layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, comment, CompKind::Union, vec!(), layout)));
                 GCompDecl(ci)
             }
             CXCursor_EnumDecl => {
@@ -102,7 +103,7 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                 GEnumDecl(ei)
             }
             CXCursor_ClassTemplate => {
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, comment, CompKind::Struct, vec!(), layout)));
                 GCompDecl(ci)
             }
             CXCursor_ClassDecl => {
@@ -117,7 +118,7 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                         list
                     }
                 };
-                let mut ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, CompKind::Struct, vec!(), layout)));
+                let mut ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, comment, CompKind::Struct, vec!(), layout)));
                 ci.borrow_mut().args = args;
                 GCompDecl(ci)
             }
@@ -127,12 +128,12 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
             }
             CXCursor_VarDecl => {
                 let mangled = cursor.mangling();
-                let vi = Rc::new(RefCell::new(VarInfo::new(spelling, mangled, TVoid)));
+                let vi = Rc::new(RefCell::new(VarInfo::new(spelling, mangled, comment, TVoid)));
                 GVar(vi)
             }
             CXCursor_FunctionDecl => {
                 let mangled = cursor.mangling();
-                let vi = Rc::new(RefCell::new(VarInfo::new(spelling, mangled, TVoid)));
+                let vi = Rc::new(RefCell::new(VarInfo::new(spelling, mangled, comment, TVoid)));
                 GFunc(vi)
             }
             _ => GOther,
@@ -580,7 +581,7 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
                 return CXChildVisit_Continue;
             }
 
-            let mut vi = VarInfo::new(spelling, cursor.mangling(), sig);
+            let mut vi = VarInfo::new(spelling, cursor.mangling(), cursor.raw_comment(), sig);
             vi.is_static = cursor.method_is_static();
             vi.is_const = cursor.cur_type().is_const();
 
