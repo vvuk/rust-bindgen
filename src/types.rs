@@ -82,7 +82,7 @@ pub enum Type {
     TVoid,
     TInt(IKind, Layout),
     TFloat(FKind, Layout),
-    TPtr(Box<Type>, bool, Layout),
+    TPtr(Box<Type>, bool, bool, Layout),
     TArray(Box<Type>, usize, Layout),
     TFuncProto(FuncSig),
     TFuncPtr(FuncSig),
@@ -96,7 +96,7 @@ impl Type {
         match self {
             &TInt(_, l) => l.size,
             &TFloat(_, l) => l.size,
-            &TPtr(_, _, l) => l.size,
+            &TPtr(_, _, _, l) => l.size,
             &TArray(_, _, l) => l.size,
             &TNamed(ref ti) => ti.borrow().ty.size(),
             &TComp(ref ci) => ci.borrow().layout.size,
@@ -112,7 +112,7 @@ impl Type {
         match self {
             &TInt(_, l) => l.align,
             &TFloat(_, l) => l.align,
-            &TPtr(_, _, l) => l.align,
+            &TPtr(_, _, _, l) => l.align,
             &TArray(_, _, l) => l.align,
             &TNamed(ref ti) => ti.borrow().ty.align(),
             &TComp(ref ci) => ci.borrow().layout.align,
