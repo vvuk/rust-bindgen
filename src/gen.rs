@@ -719,7 +719,7 @@ fn tag_dup_decl(gs: Vec<Global>) -> Vec<Global> {
 fn ctypedef_to_rs(ctx: &mut GenCtx, name: String, ty: &Type) -> Vec<P<ast::Item>> {
     fn mk_item(ctx: &mut GenCtx, name: String, ty: &Type) -> P<ast::Item> {
         let rust_name = rust_type_id(ctx, name);
-        let rust_ty = cty_to_rs(ctx, ty);
+        let rust_ty = cty_to_rs(ctx, ty, true);
         let base = ast::ItemTy(
             P(ast::Ty {
                 id: ast::DUMMY_NODE_ID,
@@ -898,7 +898,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
                 setters.push(P(gen_fullbitfield_method(ctx, &f_name, &f.ty, bitfields)))
             }
 
-            let f_ty = P(cty_to_rs(ctx, &f.ty));
+            let f_ty = P(cty_to_rs(ctx, &f.ty, f.bitfields == None));
 
             fields.push(respan(ctx.span, ast::StructField_ {
                 kind: ast::NamedField(
@@ -1095,7 +1095,7 @@ fn cunion_to_rs(ctx: &mut GenCtx, name: String, layout: Layout, members: Vec<Com
         ast::ImplPolarity::Positive,
         empty_generics(),
         None,
-        P(cty_to_rs(ctx, &union)),
+        P(cty_to_rs(ctx, &union, true)),
         gen_comp_methods(ctx, data_field_name, 0, CompKind::Union, &members, &mut extra),
     );
 
@@ -1186,7 +1186,7 @@ fn gen_comp_methods(ctx: &mut GenCtx, data_field: &str, data_offset: usize,
         if f.bitfields.is_some() { return None; }
 
         let (f_name, _) = rust_id(ctx, f.name.clone());
-        let ret_ty = P(cty_to_rs(ctx, &TPtr(Box::new(f.ty.clone()), false, Layout::zero())));
+        let ret_ty = P(cty_to_rs(ctx, &TPtr(Box::new(f.ty.clone()), false, Layout::zero()), true));
 
         // When the offset is zero, generate slightly prettier code.
         let method = {
@@ -1261,7 +1261,7 @@ fn gen_bitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
                        field_name: &String, field_type: &Type,
                        offset: usize, width: u32) -> ast::ImplItem {
     let input_type = type_for_bitfield_width(ctx, width);
-    let field_type = cty_to_rs(ctx, &field_type);
+    let field_type = cty_to_rs(ctx, &field_type, true);
     let setter_name = ctx.ext_cx.ident_of(&format!("set_{}", field_name));
     let bindgen_ident = ctx.ext_cx.ident_of(&*bindgen_name);
 
@@ -1281,7 +1281,7 @@ fn gen_bitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
 
 fn gen_fullbitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
                            field_type: &Type, bitfields: &Vec<(String, u32)>) -> ast::ImplItem {
-    let field_type = cty_to_rs(ctx, field_type);
+    let field_type = cty_to_rs(ctx, field_type, false);
     let mut args = vec!();
     for &(ref name, width) in bitfields.iter() {
         args.push(ast::Arg {
@@ -1307,24 +1307,19 @@ fn gen_fullbitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
 
     let mut stmts = Vec::with_capacity(bitfields.len() + 1);
 
-    stmts.push(quote_stmt!(&ctx.ext_cx,
-        let _bitfield_val_ = 0;
-    ).unwrap());
-
     let mut offset = 0;
+    let mut exprs = quote_expr!(&ctx.ext_cx, 0);
     for &(ref name, width) in bitfields.iter() {
         let name_ident = ctx.ext_cx.ident_of(&name);
-        stmts.push(quote_stmt!(&ctx.ext_cx,
-            _bitfield_val_ |= ($name_ident as $field_type) << $offset;
-        ).unwrap());
+        exprs = quote_expr!(&ctx.ext_cx,
+            $exprs | (($name_ident as $field_type) << $offset)
+        );
         offset += width;
     }
 
     let block = ast::Block {
         stmts: stmts,
-        expr: Some(quote_expr!(&ctx.ext_cx,
-            _bitfield_val_
-        )),
+        expr: Some(exprs),
         id: ast::DUMMY_NODE_ID,
         rules: ast::DefaultBlock,
         span: ctx.span
@@ -1337,7 +1332,7 @@ fn gen_fullbitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
             decl: P(fndecl),
             generics: empty_generics(),
             explicit_self: respan(ctx.span, ast::SelfStatic),
-            constness: ast::Constness::NotConst,
+            constness: ast::Constness::Const,
         }, P(block)
     );
 
@@ -1473,7 +1468,7 @@ fn cvar_to_rs(ctx: &mut GenCtx, name: String,
         attrs.push(mk_link_name_attr(ctx, name));
     }
 
-    let val_ty = P(cty_to_rs(ctx, ty));
+    let val_ty = P(cty_to_rs(ctx, ty, true));
 
     return P(ast::ForeignItem {
         ident: ctx.ext_cx.ident_of(&rust_name),
@@ -1492,7 +1487,7 @@ fn cfuncty_to_rs(ctx: &mut GenCtx,
 
     let ret = match *rty {
         TVoid => ast::DefaultReturn(ctx.span),
-        _ => ast::Return(P(cty_to_rs(ctx, rty)))
+        _ => ast::Return(P(cty_to_rs(ctx, rty, true)))
     };
 
     let mut unnamed: usize = 0;
@@ -1512,8 +1507,8 @@ fn cfuncty_to_rs(ctx: &mut GenCtx,
         // (if any) are those specified within the [ and ] of the array type
         // derivation.
         let arg_ty = P(match t {
-            &TArray(ref typ, _, ref l) => cty_to_rs(ctx, &TPtr(typ.clone(), false, l.clone())),
-            _ => cty_to_rs(ctx, t),
+            &TArray(ref typ, _, ref l) => cty_to_rs(ctx, &TPtr(typ.clone(), false, l.clone()), true),
+            _ => cty_to_rs(ctx, t, true),
         });
 
         ast::Arg {
@@ -1568,13 +1563,13 @@ fn cfunc_to_rs(ctx: &mut GenCtx,
            });
 }
 
-fn cty_to_rs(ctx: &mut GenCtx, ty: &Type) -> ast::Ty {
+fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
     return match ty {
         &TVoid => mk_ty(ctx, true, vec!("libc".to_string(), "c_void".to_string())),
         &TInt(i, ref layout) => match i {
             IBool => {
                 let ty_name = match layout.size {
-                    1 => "bool",
+                    1 if allow_bool => "bool",
                     2 => "u16",
                     4 => "u32",
                     8 => "u64",
@@ -1598,11 +1593,11 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type) -> ast::Ty {
             FDouble => mk_ty(ctx, false, vec!("f64".to_string()))
         },
         &TPtr(ref t, is_const, _) => {
-            let id = cty_to_rs(ctx, &**t);
+            let id = cty_to_rs(ctx, &**t, allow_bool);
             mk_ptrty(ctx, &id, is_const)
         },
         &TArray(ref t, s, _) => {
-            let ty = cty_to_rs(ctx, &**t);
+            let ty = cty_to_rs(ctx, &**t, allow_bool);
             mk_arrty(ctx, &ty, s)
         },
         &TFuncPtr(ref sig) => {
@@ -1621,7 +1616,7 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type) -> ast::Ty {
             let mut c = ci.borrow_mut();
             c.name = unnamed_name(ctx, c.name.clone(), c.filename.clone());
             let args = c.args.iter().map(|gt| {
-                P(cty_to_rs(ctx, gt))
+                P(cty_to_rs(ctx, gt, allow_bool))
             }).collect();
             mk_ty_args(ctx, false, vec!(comp_name(c.kind, &c.name)), args)
         },
