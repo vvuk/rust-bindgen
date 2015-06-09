@@ -376,6 +376,7 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
     match cursor.kind() {
         CXCursor_FieldDecl => {
             let ty = conv_ty(ctx, &cursor.cur_type(), cursor);
+            let comment = cursor.raw_comment();
 
             let (name, bitfields) = match (cursor.bit_width(), ci.members.last_mut()) {
                 // The field is a continuation of an exising bitfield
@@ -451,7 +452,7 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
                 _ => false
             };
 
-            let field = FieldInfo::new(name, ty.clone(), bitfields);
+            let field = FieldInfo::new(name, ty.clone(), comment, bitfields);
             if is_composite {
                 if let Some(CompMember::Comp(c)) = ci.members.pop() {
                     ci.members.push(CompMember::CompField(c, field));
@@ -513,7 +514,7 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
             } else {
                 false
             };
-            let field = FieldInfo::new(fieldname, ty.clone(), None);
+            let field = FieldInfo::new(fieldname, ty.clone(), "".to_owned(), None);
             if !found_virtual_base && cursor.is_virtual_base() {
                 ci.members.insert(0, CompMember::Field(field));
                 ci.has_vtable = true;
