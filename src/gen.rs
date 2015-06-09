@@ -198,17 +198,18 @@ fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo, counts: &mut HashMap<String,
     count += 1;
     counts.insert(v.name.clone(), count);
 
+    let mut attrs = mk_doc_attr(ctx, v.comment.clone());
+    attrs.push(respan(ctx.span, ast::Attribute_ {
+        id: mk_attr_id(),
+        style: ast::AttrOuter,
+        value: P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "inline".to_string()))
+        )),
+        is_sugared_doc: false
+    }));
+
     let item = ast::Item {
         ident: ctx.ext_cx.ident_of(&name),
-        attrs: vec!(mk_doc_attr(ctx, v.comment.clone()),
-            respan(ctx.span, ast::Attribute_ {
-                id: mk_attr_id(),
-                style: ast::AttrOuter,
-                value: P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "inline".to_string()))
-                )),
-                is_sugared_doc: false
-            }
-        )),
+        attrs: attrs,
         id: ast::DUMMY_NODE_ID,
         node: ast::ItemFn(
             P(fndecl),
@@ -328,19 +329,20 @@ fn gen_unmangle_method(ctx: &mut GenCtx,
     count += 1;
     counts.insert(v.name.clone(), count);
 
+    let mut attrs = mk_doc_attr(ctx, v.comment.clone());
+    attrs.push(respan(ctx.span, ast::Attribute_ {
+        id: mk_attr_id(),
+        style: ast::AttrOuter,
+        value: P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "inline".to_string()))
+        )),
+        is_sugared_doc: false
+    }));
+
     let item = ast::ImplItem {
         id: ast::DUMMY_NODE_ID,
         ident: ctx.ext_cx.ident_of(&name),
         vis: ast::Public,
-        attrs: vec!(mk_doc_attr(ctx, v.comment.clone()),
-            respan(ctx.span, ast::Attribute_ {
-                id: mk_attr_id(),
-                style: ast::AttrOuter,
-                value: P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "inline".to_string()))
-                )),
-                is_sugared_doc: false
-            }
-        )),
+        attrs: attrs,
         node: ast::MethodImplItem(sig, P(block)),
         span: ctx.span
     };
@@ -907,7 +909,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
                 ),
                 id: ast::DUMMY_NODE_ID,
                 ty: f_ty,
-                attrs: vec!(mk_doc_attr(ctx, f.comment.clone()))
+                attrs: mk_doc_attr(ctx, f.comment.clone())
             }));
         }
 
@@ -973,8 +975,11 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
         }
     );
 
+    let mut attrs = mk_doc_attr(ctx, ci.comment);
+    attrs.push(mk_repr_attr(ctx, layout));
+    attrs.push(mk_deriving_copy_attr(ctx));
     let struct_def = P(ast::Item { ident: ctx.ext_cx.ident_of(&id),
-        attrs: vec!(mk_doc_attr(ctx, ci.comment), mk_repr_attr(ctx, layout), mk_deriving_copy_attr(ctx)),
+        attrs: attrs,
         id: ast::DUMMY_NODE_ID,
         node: def,
         vis: ast::Public,
@@ -1441,7 +1446,11 @@ fn mk_deriving_copy_attr(ctx: &mut GenCtx) -> ast::Attribute {
     })
 }
 
-fn mk_doc_attr(ctx: &mut GenCtx, doc: String) -> ast::Attribute {
+fn mk_doc_attr(ctx: &mut GenCtx, doc: String) -> Vec<ast::Attribute> {
+    if doc.is_empty() {
+        return vec!();
+    }
+
     let attr_val = P(respan(ctx.span, ast::MetaNameValue(
         to_intern_str(ctx, "doc".to_string()),
         respan(ctx.span, ast::LitStr(
@@ -1450,12 +1459,12 @@ fn mk_doc_attr(ctx: &mut GenCtx, doc: String) -> ast::Attribute {
         ))
     )));
 
-    respan(ctx.span, ast::Attribute_ {
+    vec!(respan(ctx.span, ast::Attribute_ {
         id: mk_attr_id(),
         style: ast::AttrOuter,
         value: attr_val,
         is_sugared_doc: true
-    })
+    }))
 }
 
 fn cvar_to_rs(ctx: &mut GenCtx, name: String,
