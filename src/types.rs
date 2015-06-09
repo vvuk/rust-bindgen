@@ -255,14 +255,16 @@ impl fmt::Debug for CompInfo {
 pub struct FieldInfo {
     pub name: String,
     pub ty: Type,
+    pub comment: String,
     pub bitfields: Option<Vec<(String, u32)>>,
 }
 
 impl FieldInfo {
-    pub fn new(name: String, ty: Type, bitfields: Option<Vec<(String, u32)>>) -> FieldInfo {
+    pub fn new(name: String, ty: Type, comment: String, bitfields: Option<Vec<(String, u32)>>) -> FieldInfo {
         FieldInfo {
             name: name,
             ty: ty,
+            comment: comment,
             bitfields: bitfields,
         }
     }

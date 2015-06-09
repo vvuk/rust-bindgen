@@ -923,7 +923,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
                 ),
                 id: ast::DUMMY_NODE_ID,
                 ty: f_ty,
-                attrs: vec!()
+                attrs: vec!(mk_doc_attr(ctx, f.comment.clone()))
             }));
         }
 
