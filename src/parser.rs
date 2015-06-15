@@ -299,8 +299,8 @@ fn conv_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Type
         CXType_Char_S => TInt(ISChar, layout),
         CXType_UChar |
         CXType_Char_U => TInt(IUChar, layout),
-        CXType_WChar |
-        CXType_Char16 => TInt(IShort, layout),
+        CXType_WChar => TInt(IShort, layout),
+        CXType_Char16 |
         CXType_UShort => TInt(IUShort, layout),
         CXType_UInt => TInt(IUInt, layout),
         CXType_ULong => TInt(IULong, layout),
