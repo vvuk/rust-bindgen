@@ -1640,7 +1640,7 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
                 };
                 mk_ty(ctx, false, vec!(ty_name.to_owned()))
             },
-            ISChar |
+            ISChar => mk_ty(ctx, true, vec!("libc".to_string(), "c_char".to_string())),
             IInt |
             IShort |
             ILongLong => mk_ty(ctx, false, vec!(format!("i{}", layout.size * 8))),
