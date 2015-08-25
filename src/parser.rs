@@ -352,22 +352,16 @@ fn opaque_ty(ctx: &mut ClangParserCtx, ty: &cx::Type) {
 /// nested composites that make up the visited composite.
 fn visit_composite(cursor: &Cursor, parent: &Cursor,
                    ctx: &mut ClangParserCtx,
-                   compinfo: &mut CompInfo) -> Enum_CXVisitorResult {
-
-    let members: &mut Vec<CompMember> = &mut compinfo.members;
-    let args: &mut Vec<Type> = &mut compinfo.args;
-    let methods: &mut Vec<VarInfo> = &mut ci.methods;
+                   ci: &mut CompInfo) -> Enum_CXVisitorResult {
 
     fn is_bitfield_continuation(field: &il::FieldInfo, ty: &il::Type, width: u32) -> bool {
         match (&field.bitfields, ty) {
             (&Some(ref bitfields), &il::TInt(_, layout)) if *ty == field.ty => {
-                let iter = bitfields.iter().map(|&(_, w)| w);
-                iter.sum::<u32>() + width <= (layout.size * 8) as u32
+                bitfields.iter().map(|&(_, w)| w).fold(0u32, |acc, w| acc + w) + width <= (layout.size * 8) as u32
             },
             (&Some(ref bitfields), &il::TNamed(ref info)) if *ty == field.ty => {
                 let info = info.borrow();
-                let iter = bitfields.iter().map(|&(_, w)| w);
-                iter.sum::<u32>() + width <= (info.layout.size * 8) as u32
+                bitfields.iter().map(|&(_, w)| w).fold(0u32, |acc, w| acc + w) + width <= (info.layout.size * 8) as u32
             },
             _ => false
         }
@@ -478,7 +472,7 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
             });
         }
         CXCursor_PackedAttr => {
-            compinfo.layout.packed = true;
+            ci.layout.packed = true;
         }
         CXCursor_TemplateTypeParameter => {
             let ty = conv_ty(ctx, &cursor.cur_type(), cursor);
