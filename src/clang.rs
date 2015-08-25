@@ -5,7 +5,7 @@ use std::{mem, ptr};
 use std::fmt;
 use std::hash::Hash;
 use std::hash::Hasher;
-use std::ffi::CString;
+use std::ffi::{CString, CStr};
 
 use clangll::*;
 

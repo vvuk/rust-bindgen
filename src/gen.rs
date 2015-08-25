@@ -462,7 +462,7 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
             },
             GVar(vi) => {
                 let v = vi.borrow();
-                let ty = cty_to_rs(&mut ctx, &v.ty);
+                let ty = cty_to_rs(&mut ctx, &v.ty, v.is_const);
                 defs.push(const_to_rs(&mut ctx, v.name.clone(), v.val.unwrap(), ty));
             },
             _ => { }
@@ -791,7 +791,7 @@ fn comp_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo)
 }
 
 fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Item>> {
-    let layout = &ci.layout;
+    let layout = ci.layout;
     let members = &ci.members;
     let args = &ci.args;
     let methodlist = &ci.methods;
@@ -859,7 +859,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
         let vf_name = format!("_vftable_{}", name);
         let item = ast::Item {
             ident: ctx.ext_cx.ident_of(&vf_name),
-            attrs: vec!(mk_repr_attr(ctx)),
+            attrs: vec!(mk_repr_attr(ctx, layout)),
             id: ast::DUMMY_NODE_ID,
             node: ast::ItemStruct(
                 P(ast::StructDef {

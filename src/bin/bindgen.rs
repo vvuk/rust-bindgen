@@ -4,7 +4,6 @@
 extern crate bindgen;
 #[macro_use]
 extern crate log;
-extern crate syntax;
 
 use bindgen::{Bindings, BindgenOptions, LinkType, Logger};
 use std::io;
