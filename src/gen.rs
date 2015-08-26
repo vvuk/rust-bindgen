@@ -235,7 +235,7 @@ fn gen_unmangle_method(ctx: &mut GenCtx,
 
     match explicit_self {
         ast::SelfStatic => (),
-        ast::SelfRegion(_, mutable, ident) => {
+        ast::SelfRegion(_, mutable, _) => {
             let selfexpr = match mutable {
                 ast::MutImmutable => quote_expr!(&ctx.ext_cx, &*self),
                 ast::MutMutable => quote_expr!(&ctx.ext_cx, &mut *self),
@@ -447,7 +447,7 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
                     e.name = unnamed_name(&mut ctx, e.name.clone(), e.filename.clone());
                 }
                 let e = ei.borrow().clone();
-                defs.extend(cenum_to_rs(&mut ctx, enum_name(&e.name), e.kind, e.items).into_iter())
+                defs.extend(cenum_to_rs(&mut ctx, enum_name(&e.name), e.items).into_iter())
             },
             GVar(vi) => {
                 let v = vi.borrow();
@@ -757,7 +757,7 @@ fn ctypedef_to_rs(ctx: &mut GenCtx, name: String, ty: &Type) -> Vec<P<ast::Item>
             if is_empty {
                 ei.borrow_mut().name = name.clone();
                 let e = ei.borrow().clone();
-                cenum_to_rs(ctx, name, e.kind, e.items)
+                cenum_to_rs(ctx, name, e.items)
             } else {
                 vec!(mk_item(ctx, name, ty))
             }
@@ -871,7 +871,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
     for m in members.iter() {
         if let &CompMember::Enum(ref ei) = m {
             let e = ei.borrow().clone();
-            extra.extend(cenum_to_rs(ctx, format!("{}_{}", name, e.name), e.kind, e.items).into_iter());
+            extra.extend(cenum_to_rs(ctx, format!("{}_{}", name, e.name), e.items).into_iter());
             continue;
         }
 
@@ -1137,7 +1137,7 @@ fn const_to_rs(ctx: &mut GenCtx, name: String, val: i64, val_ty: ast::Ty) -> P<a
     })
 }
 
-fn cenum_to_rs(ctx: &mut GenCtx, name: String, kind: IKind, items: Vec<EnumItem>) -> Vec<P<ast::Item>> {
+fn cenum_to_rs(ctx: &mut GenCtx, name: String, items: Vec<EnumItem>) -> Vec<P<ast::Item>> {
     let variants = items.iter().map(|it| {
         let value_sign = ast::UnsuffixedIntLit(if it.val < 0 { ast::Minus } else { ast::Plus });
         let value_node =
@@ -1310,7 +1310,7 @@ fn gen_fullbitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
         variadic: false
     };
 
-    let mut stmts = Vec::with_capacity(bitfields.len() + 1);
+    let stmts = Vec::with_capacity(bitfields.len() + 1);
 
     let mut offset = 0;
     let mut exprs = quote_expr!(&ctx.ext_cx, 0);

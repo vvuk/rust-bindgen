@@ -1,6 +1,6 @@
 #![crate_name = "bindgen"]
 #![crate_type = "dylib"]
-#![feature(convert, collections, quote)]
+#![feature(convert, quote)]
 
 extern crate syntex_syntax as syntax;
 extern crate libc;
