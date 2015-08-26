@@ -118,7 +118,7 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                         list
                     }
                 };
-                let mut ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, comment, CompKind::Struct, vec!(), layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, comment, CompKind::Struct, vec!(), layout)));
                 ci.borrow_mut().args = args;
                 GCompDecl(ci)
             }
@@ -189,8 +189,7 @@ fn conv_ptr_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor, is_ref:
         CXType_FunctionProto |
         CXType_FunctionNoProto => {
             let ret_ty = ty.ret_type();
-            let decl = ty.declaration();
-            if ret_ty.kind() != CXType_Invalid {
+            return if ret_ty.kind() != CXType_Invalid {
                 TFuncPtr(mk_fn_sig(ctx, ty, cursor))
             } else if cursor.kind() == CXCursor_VarDecl {
                 let can_ty = ty.canonical_type();
