@@ -127,106 +127,6 @@ fn enum_name(name: &String) -> String {
     name.to_owned()
 }
 
-fn gen_unmangle_func(ctx: &mut GenCtx, v: &VarInfo, counts: &mut HashMap<String, isize>) -> P<ast::Item> {
-    let fndecl;
-    let mut args = vec!();
-    match v.ty {
-        TFuncPtr(ref sig) => {
-            fndecl = cfuncty_to_rs(ctx,
-                                   &*sig.ret_ty, sig.args.as_slice(),
-                                   false);
-            let mut unnamed: usize = 0;
-            for arg in sig.args.iter() {
-                let (ref n, _) = *arg;
-                let argname = if n.is_empty() {
-                    unnamed += 1;
-                    format!("arg{}", unnamed)
-                } else {
-                    rust_id(ctx, n.clone()).0
-                };
-                let expr = ast::Expr {
-                    id: ast::DUMMY_NODE_ID,
-                    node: ast::ExprPath(None, ast::Path {
-                        span: ctx.span,
-                        global: false,
-                        segments: vec!(ast::PathSegment {
-                            identifier: ctx.ext_cx.ident_of(&argname),
-                            parameters: ast::PathParameters::none()
-                        })
-                    }),
-                    span: ctx.span
-                };
-                args.push(P(expr));
-            }
-        },
-        _ => unreachable!()
-    };
-
-    let block = ast::Block {
-        stmts: vec!(),
-        expr: Some(P(ast::Expr {
-            id: ast::DUMMY_NODE_ID,
-            node: ast::ExprCall(
-                P(ast::Expr {
-                    id: ast::DUMMY_NODE_ID,
-                    node: ast::ExprPath(None, ast::Path {
-                        span: ctx.span,
-                        global: false,
-                        segments: vec!(ast::PathSegment {
-                            identifier: ctx.ext_cx.ident_of(&v.mangled),
-                            parameters: ast::PathParameters::none()
-                        })
-                    }),
-                    span: ctx.span
-                }),
-                args
-            ),
-            span: ctx.span
-        })),
-        id: ast::DUMMY_NODE_ID,
-        rules: ast::DefaultBlock,
-        span: ctx.span
-    };
-
-    let mut name = v.name.clone();
-    let mut count = 0;
-    match counts.get(&v.name) {
-        Some(x) => {
-            count = *x;
-            name.push_str(&x.to_string());
-        },
-        None => ()
-    }
-    count += 1;
-    counts.insert(v.name.clone(), count);
-
-    let mut attrs = mk_doc_attr(ctx, v.comment.clone());
-    attrs.push(respan(ctx.span, ast::Attribute_ {
-        id: mk_attr_id(),
-        style: ast::AttrOuter,
-        value: P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "inline".to_string()))
-        )),
-        is_sugared_doc: false
-    }));
-
-    let item = ast::Item {
-        ident: ctx.ext_cx.ident_of(&name),
-        attrs: attrs,
-        id: ast::DUMMY_NODE_ID,
-        node: ast::ItemFn(
-            P(fndecl),
-            ast::Unsafety::Unsafe,
-            ast::Constness::NotConst,
-            abi::C,
-            empty_generics(),
-            P(block)
-        ),
-        vis: ast::Public,
-        span: ctx.span
-    };
-    P(item)
-}
-
 fn gen_unmangle_method(ctx: &mut GenCtx,
                        v: &VarInfo,
                        counts: &mut HashMap<String, isize>,
@@ -475,7 +375,6 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
         }
     }).collect();
 
-    let mut unmangle_funcs = vec!();
     let mut unmangle_count: HashMap<String, isize> = HashMap::new();
     let funcs = {
         let func_list = fs.into_iter().map(|f| {
@@ -484,19 +383,21 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
                     let v = vi.borrow();
                     match v.ty {
                         TFuncPtr(ref sig) => {
-                            let name;
-                            let vis;
-                            if v.mangled.is_empty() {
-                                vis = ast::Public;
-                                name = v.name.clone();
-                            } else {
-                                vis = ast::Inherited;
-                                name = v.mangled.clone();
-                                unmangle_funcs.push(gen_unmangle_func(&mut ctx, &v, &mut unmangle_count));
-                            };
-                            let decl = cfunc_to_rs(&mut ctx, name,
+                            let mut name = v.name.clone();
+                            let mut count = 0;
+                            match unmangle_count.get(&v.name) {
+                                Some(x) => {
+                                    count = *x;
+                                    name.push_str(&x.to_string());
+                                },
+                                None => ()
+                            }
+                            count += 1;
+                            unmangle_count.insert(v.name.clone(), count);
+
+                            let decl = cfunc_to_rs(&mut ctx, name, v.mangled.clone(),
                                                    &*sig.ret_ty, &sig.args[..],
-                                                   sig.is_variadic, vis);
+                                                   sig.is_variadic, ast::Public);
                             (sig.abi, decl)
                         }
                         _ => unreachable!()
@@ -529,7 +430,6 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
     }
 
     //let attrs = vec!(mk_attr_list(&mut ctx, "allow", ["dead_code", "non_camel_case_types", "uppercase_variables"]));
-    defs.extend(unmangle_funcs);
 
     defs
 }
@@ -1039,7 +939,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
                     ast::SelfRegion(None, ast::MutMutable, ctx.ext_cx.ident_of("self"))
                 };
                 unmangledlist.push(gen_unmangle_method(ctx, &v, &mut unmangle_count, explicit_self));
-                mangledlist.push(cfunc_to_rs(ctx, name,
+                mangledlist.push(cfunc_to_rs(ctx, name, String::new(),
                                              &*sig.ret_ty, sig.args.as_slice(),
                                              sig.is_variadic, ast::Inherited));
             }
@@ -1595,6 +1495,7 @@ fn cfuncty_to_rs(ctx: &mut GenCtx,
 
 fn cfunc_to_rs(ctx: &mut GenCtx,
                name: String,
+               mangled: String,
                rty: &Type,
                aty: &[(String, Type)],
                var: bool,
@@ -1608,7 +1509,9 @@ fn cfunc_to_rs(ctx: &mut GenCtx,
     let (rust_name, was_mangled) = rust_id(ctx, name.clone());
 
     let mut attrs = vec!();
-    if was_mangled {
+    if !mangled.is_empty() {
+        attrs.push(mk_link_name_attr(ctx, mangled));
+    } else if was_mangled {
         attrs.push(mk_link_name_attr(ctx, name));
     }
 
