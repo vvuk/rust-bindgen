@@ -527,6 +527,11 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
                 return CXChildVisit_Continue;
             }
 
+            let visibility = cursor.visibility();
+            if visibility != CXVisibility_Default {
+                return CXChildVisit_Continue;
+            }
+
             if ci.args.len() > 0 {
                 return CXChildVisit_Continue;
             }
@@ -687,6 +692,11 @@ fn visit_top(cursor: &Cursor,
                 return CXChildVisit_Continue;
             }
 
+            let visibility = cursor.visibility();
+            if visibility != CXVisibility_Default {
+                return CXChildVisit_Continue;
+            }
+
             let spelling = cursor.spelling();
             if spelling.len() > 8 &&
                &(spelling)[..8] == "operator" {
@@ -708,6 +718,10 @@ fn visit_top(cursor: &Cursor,
                 return CXChildVisit_Continue;
             }
 
+            let visibility = cursor.visibility();
+            if visibility != CXVisibility_Default {
+                return CXChildVisit_Continue;
+            }
             let ty = conv_ty(ctx, &cursor.cur_type(), cursor);
             let var = decl_name(ctx, cursor);
             let vi = var.varinfo();
