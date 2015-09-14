@@ -138,6 +138,12 @@ impl Cursor {
         }
     }
 
+    pub fn visibility(&self) -> Enum_CXVisibilityKind {
+        unsafe {
+            clang_getCursorVisibility(self.x)
+        }
+    }
+
     // function
     pub fn args(&self) -> Vec<Cursor> {
         unsafe {

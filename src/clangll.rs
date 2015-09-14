@@ -333,6 +333,11 @@ pub const CXLinkage_NoLinkage: ::libc::c_uint = 1;
 pub const CXLinkage_Internal: ::libc::c_uint = 2;
 pub const CXLinkage_UniqueExternal: ::libc::c_uint = 3;
 pub const CXLinkage_External: ::libc::c_uint = 4;
+pub type Enum_CXVisibilityKind = ::libc::c_uint;
+pub const CXVisibility_Invalid: ::libc::c_uint = 0;
+pub const CXVisibility_Hidden: ::libc::c_uint = 1;
+pub const CXVisibility_Protected: ::libc::c_uint = 2;
+pub const CXVisibility_Default: ::libc::c_uint = 3;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct Struct_CXPlatformAvailability {
@@ -1004,6 +1009,7 @@ extern "C" {
     pub fn clang_isPreprocessing(arg1: Enum_CXCursorKind) -> ::libc::c_uint;
     pub fn clang_isUnexposed(arg1: Enum_CXCursorKind) -> ::libc::c_uint;
     pub fn clang_getCursorLinkage(cursor: CXCursor) -> Enum_CXLinkageKind;
+    pub fn clang_getCursorVisibility(cursor: CXCursor) -> Enum_CXVisibilityKind;
     pub fn clang_getCursorAvailability(cursor: CXCursor) ->
      Enum_CXAvailabilityKind;
     pub fn clang_getCursorPlatformAvailability(cursor: CXCursor,
