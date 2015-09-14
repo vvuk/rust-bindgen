@@ -362,7 +362,7 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
         match v {
             GVar(vi) => {
                 let v = vi.borrow();
-                cvar_to_rs(&mut ctx, v.name.clone(), &v.ty, v.is_const)
+                cvar_to_rs(&mut ctx, v.name.clone(), v.mangled.clone(), &v.ty, v.is_const)
             },
             _ => unreachable!()
         }
@@ -1368,12 +1368,15 @@ fn mk_doc_attr(ctx: &mut GenCtx, doc: String) -> Vec<ast::Attribute> {
 }
 
 fn cvar_to_rs(ctx: &mut GenCtx, name: String,
+                                mangled: String,
                                 ty: &Type,
                                 is_const: bool) -> P<ast::ForeignItem> {
     let (rust_name, was_mangled) = rust_id(ctx, name.clone());
 
     let mut attrs = Vec::new();
-    if was_mangled {
+    if !mangled.is_empty() {
+        attrs.push(mk_link_name_attr(ctx, mangled));
+    } else if was_mangled {
         attrs.push(mk_link_name_attr(ctx, name));
     }
 
