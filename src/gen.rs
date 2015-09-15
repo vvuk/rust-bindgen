@@ -1284,8 +1284,13 @@ fn mk_blob_field(ctx: &GenCtx, name: &str, layout: Layout) -> Spanned<ast::Struc
         _ => "u8",
     };
     let data_len = if ty_name == "u8" { layout.size } else { layout.size / layout.align };
+
     let base_ty = mk_ty(ctx, false, vec!(ty_name.to_string()));
-    let data_ty = P(mk_arrty(ctx, &base_ty, data_len));
+    let data_ty = if data_len == 1 {
+        P(base_ty)
+    } else {
+        P(mk_arrty(ctx, &base_ty, data_len))
+    };
     respan(ctx.span, ast::StructField_ {
         kind: ast::NamedField(
             ctx.ext_cx.ident_of(name),
