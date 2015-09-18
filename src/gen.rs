@@ -1217,7 +1217,7 @@ fn gen_bitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
                        field_name: &String, field_type: &Type,
                        offset: usize, width: u32) -> ast::ImplItem {
     let input_type = type_for_bitfield_width(ctx, width);
-    let field_type = cty_to_rs(ctx, &field_type, true);
+    let field_type = cty_to_rs(ctx, &field_type, false);
     let setter_name = ctx.ext_cx.ident_of(&format!("set_{}", field_name));
     let bindgen_ident = ctx.ext_cx.ident_of(&*bindgen_name);
 
