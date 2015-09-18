@@ -347,7 +347,7 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
                     e.name = unnamed_name(&mut ctx, e.name.clone(), e.filename.clone());
                 }
                 let e = ei.borrow().clone();
-                defs.extend(cenum_to_rs(&mut ctx, enum_name(&e.name), e.items).into_iter())
+                defs.extend(cenum_to_rs(&mut ctx, enum_name(&e.name), e.items, e.layout).into_iter())
             },
             GVar(vi) => {
                 let v = vi.borrow();
@@ -692,7 +692,7 @@ fn ctypedef_to_rs(ctx: &mut GenCtx, name: String, ty: &Type) -> Vec<P<ast::Item>
             if is_empty {
                 ei.borrow_mut().name = name.clone();
                 let e = ei.borrow().clone();
-                cenum_to_rs(ctx, name, e.items)
+                cenum_to_rs(ctx, name, e.items, e.layout)
             } else {
                 vec!(mk_item(ctx, name, ty))
             }
@@ -814,7 +814,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
             } else {
                 e.name.clone()
             };
-            extra.extend(cenum_to_rs(ctx, ename, e.items).into_iter());
+            extra.extend(cenum_to_rs(ctx, ename, e.items, e.layout).into_iter());
             continue;
         }
 
@@ -1080,7 +1080,7 @@ fn const_to_rs(ctx: &mut GenCtx, name: String, val: i64, val_ty: ast::Ty) -> P<a
     })
 }
 
-fn cenum_to_rs(ctx: &mut GenCtx, name: String, items: Vec<EnumItem>) -> Vec<P<ast::Item>> {
+fn cenum_to_rs(ctx: &mut GenCtx, name: String, items: Vec<EnumItem>, layout: Layout) -> Vec<P<ast::Item>> {
     let variants = items.iter().map(|it| {
         let value_sign = ast::UnsuffixedIntLit(if it.val < 0 { ast::Minus } else { ast::Plus });
         let value_node =
@@ -1102,6 +1102,14 @@ fn cenum_to_rs(ctx: &mut GenCtx, name: String, items: Vec<EnumItem>) -> Vec<P<as
         P(variant)
     }).collect();
 
+    let enum_ty = match layout.size {
+        1 => "i8",
+        2 => "i16",
+        4 => "i32",
+        8 => "i64",
+        _ => "i32",
+    };
+
     vec!(P(ast::Item {
         ident: ctx.ext_cx.ident_of(&name),
         attrs: vec!(respan(ctx.span, ast::Attribute_ {
@@ -1110,7 +1118,7 @@ fn cenum_to_rs(ctx: &mut GenCtx, name: String, items: Vec<EnumItem>) -> Vec<P<as
             value: P(respan(ctx.span, ast::MetaList(
                 to_intern_str(ctx, "repr".to_string()),
                 vec!(P(respan(ctx.span,
-                              ast::MetaWord(to_intern_str(ctx, "i32".to_string())))))
+                              ast::MetaWord(to_intern_str(ctx, enum_ty.to_string())))))
             ))),
             is_sugared_doc: false
         }), mk_deriving_copy_attr(ctx)),
