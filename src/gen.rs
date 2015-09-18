@@ -767,11 +767,19 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
         }
     }
 
+    let mut anon_enum_count = 0;
     let mut setters = vec!();
     for m in members.iter() {
         if let &CompMember::Enum(ref ei) = m {
             let e = ei.borrow().clone();
-            extra.extend(cenum_to_rs(ctx, format!("{}_{}", name, e.name), e.items).into_iter());
+            let ename = if e.name.is_empty() {
+                let ename = format!("{}_enum{}", name, anon_enum_count);
+                anon_enum_count += 1;
+                ename
+            } else {
+                e.name.clone()
+            };
+            extra.extend(cenum_to_rs(ctx, ename, e.items).into_iter());
             continue;
         }
 
