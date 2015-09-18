@@ -197,7 +197,7 @@ fn conv_ptr_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor, is_ref:
                 let can_ty = ty.canonical_type();
                 conv_ty(ctx, &can_ty, cursor)
             } else {
-                TPtr(Box::new(conv_decl_ty(ctx, ty)), ty.is_const(), is_ref, layout)
+                TPtr(Box::new(conv_decl_ty(ctx, ty, cursor)), ty.is_const(), is_ref, layout)
             };
         }
         CXType_Typedef => {
@@ -249,7 +249,7 @@ fn mk_fn_sig(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Fu
     }
 }
 
-fn conv_decl_ty(ctx: &mut ClangParserCtx, ty: &cx::Type) -> il::Type {
+fn conv_decl_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Type {
     let ty_decl = &ty.declaration();
     return match ty_decl.kind() {
         CXCursor_StructDecl |
@@ -257,7 +257,21 @@ fn conv_decl_ty(ctx: &mut ClangParserCtx, ty: &cx::Type) -> il::Type {
         CXCursor_ClassTemplate |
         CXCursor_ClassDecl => {
             let decl = decl_name(ctx, ty_decl);
+            let args = match ty.num_template_args() {
+                -1 => vec!(),
+                len => {
+                    let mut list = Vec::with_capacity(len as usize);
+                    for i in 0..len {
+                        let arg_type = ty.template_arg_type(i);
+                        list.push(conv_ty(ctx, &arg_type, &cursor));
+                    }
+                    list
+                }
+            };
             let ci = decl.compinfo();
+            if !args.is_empty() {
+                ci.borrow_mut().args = args;
+            }
             TComp(ci)
         }
         CXCursor_EnumDecl => {
@@ -320,7 +334,7 @@ fn conv_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Type
         CXType_Record |
         CXType_Typedef  |
         CXType_Unexposed |
-        CXType_Enum => conv_decl_ty(ctx, ty),
+        CXType_Enum => conv_decl_ty(ctx, ty, cursor),
         CXType_ConstantArray => TArray(Box::new(conv_ty(ctx, &ty.elem_type(), cursor)), ty.array_size(), layout),
         _ => {
             let fail = ctx.options.fail_on_unknown_type;
