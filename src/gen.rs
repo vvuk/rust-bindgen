@@ -802,6 +802,24 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
         }
     }
 
+    if members.is_empty() {
+        let mut phantom_count = 0;
+        for arg in args {
+            let f_name = format!("_phantom{}", phantom_count);
+            phantom_count += 1;
+            let inner_type = P(cty_to_rs(ctx, &arg, true));
+            fields.push(respan(ctx.span, ast::StructField_ {
+                kind: ast::NamedField(
+                    ctx.ext_cx.ident_of(&f_name),
+                    ast::Public,
+                ),
+                id: ast::DUMMY_NODE_ID,
+                ty: quote_ty!(&ctx.ext_cx, PhantomData<$inner_type>),
+                attrs: vec!(),
+            }));
+        }
+    }
+
     let mut anon_enum_count = 0;
     let mut setters = vec!();
     for m in members.iter() {
