@@ -565,11 +565,6 @@ fn tag_dup_decl(gs: Vec<Global>) -> Vec<Global> {
               let b = ei2.borrow();
               check(&a.name, &b.name)
           },
-          (&GCompDecl(ref ei1), &GComp(ref ei2)) => {
-              let a = ei1.borrow();
-              let b = ei2.borrow();
-              check(&a.name, &b.name)
-          },
           (&GEnumDecl(ref ei1), &GEnumDecl(ref ei2)) => {
               let a = ei1.borrow();
               let b = ei2.borrow();
@@ -591,13 +586,29 @@ fn tag_dup_decl(gs: Vec<Global>) -> Vec<Global> {
         }
     }
 
+    fn check_opaque_dup(g1: &Global, g2: &Global) -> bool {
+        match (g1, g2) {
+            (&GCompDecl(ref ci1), &GComp(ref ci2)) => {
+                let a = ci1.borrow();
+                let b = ci2.borrow();
+                check(&a.name, &b.name)
+            },
+            (&GEnumDecl(ref ei1), &GEnum(ref ei2)) => {
+                let a = ei1.borrow();
+                let b = ei2.borrow();
+                check(&a.name, &b.name)
+            },
+            _ => false,
+        }
+    }
+
     if gs.is_empty() {
         return gs;
     }
 
     let len = gs.len();
-    let mut res: Vec<Global> = vec!();
-    res.push(gs[0].clone());
+    let mut step: Vec<Global> = vec!();
+    step.push(gs[0].clone());
 
     for i in 1..len {
         let mut dup = false;
@@ -611,7 +622,31 @@ fn tag_dup_decl(gs: Vec<Global>) -> Vec<Global> {
             }
         }
         if !dup {
-            res.push(gs[i].clone());
+            step.push(gs[i].clone());
+        }
+    }
+
+    let len = step.len();
+    let mut res: Vec<Global> = vec!();
+    for i in 0..len {
+        let mut dup = false;
+        match &step[i] {
+            &GCompDecl(_) | &GEnumDecl(_) => {
+                for j in 0..len {
+                    if i == j {
+                        continue;
+                    }
+                    if check_opaque_dup(&step[i], &step[j]) {
+                        dup = true;
+                        break;
+                    }
+                }
+            },
+            _ => (),
+        }
+
+        if !dup {
+            res.push(step[i].clone());
         }
     }
 
