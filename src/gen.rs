@@ -186,7 +186,7 @@ fn gen_unmangle_method(ctx: &mut GenCtx,
 
     let sig = ast::MethodSig {
         unsafety: ast::Unsafety::Unsafe,
-        abi: abi::C,
+        abi: abi::Rust,
         decl: P(fndecl),
         generics: empty_generics(),
         explicit_self: respan(ctx.span, explicit_self),
