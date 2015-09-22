@@ -395,7 +395,7 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
                             count += 1;
                             unmangle_count.insert(v.name.clone(), count);
 
-                            let decl = cfunc_to_rs(&mut ctx, name, v.mangled.clone(),
+                            let decl = cfunc_to_rs(&mut ctx, name, v.mangled.clone(), v.comment.clone(),
                                                    &*sig.ret_ty, &sig.args[..],
                                                    sig.is_variadic, ast::Public);
                             (sig.abi, decl)
@@ -1001,7 +1001,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
                     ast::SelfRegion(None, ast::MutMutable, ctx.ext_cx.ident_of("self"))
                 };
                 unmangledlist.push(gen_unmangle_method(ctx, &v, &mut unmangle_count, explicit_self));
-                mangledlist.push(cfunc_to_rs(ctx, name, String::new(),
+                mangledlist.push(cfunc_to_rs(ctx, name, String::new(), String::new(),
                                              &*sig.ret_ty, sig.args.as_slice(),
                                              sig.is_variadic, ast::Inherited));
             }
@@ -1573,6 +1573,7 @@ fn cfuncty_to_rs(ctx: &mut GenCtx,
 fn cfunc_to_rs(ctx: &mut GenCtx,
                name: String,
                mangled: String,
+               comment: String,
                rty: &Type,
                aty: &[(String, Type)],
                var: bool,
@@ -1585,7 +1586,7 @@ fn cfunc_to_rs(ctx: &mut GenCtx,
 
     let (rust_name, was_mangled) = rust_id(ctx, name.clone());
 
-    let mut attrs = vec!();
+    let mut attrs = mk_doc_attr(ctx, comment);
     if !mangled.is_empty() {
         attrs.push(mk_link_name_attr(ctx, mangled));
     } else if was_mangled {
