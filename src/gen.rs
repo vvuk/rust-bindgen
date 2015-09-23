@@ -1130,6 +1130,11 @@ fn const_to_rs(ctx: &mut GenCtx, name: String, val: i64, val_ty: ast::Ty) -> P<a
 }
 
 fn cenum_to_rs(ctx: &mut GenCtx, name: String, items: Vec<EnumItem>, layout: Layout) -> Vec<P<ast::Item>> {
+    // Rust is not happy with univariant enums
+    if items.len() < 2 {
+        return vec!();
+    }
+
     let variants = items.iter().map(|it| {
         let value_sign = ast::UnsuffixedIntLit(if it.val < 0 { ast::Minus } else { ast::Plus });
         let value_node =
