@@ -65,6 +65,12 @@ impl Cursor {
         }
     }
 
+    pub fn comment(&self) -> Comment {
+        unsafe {
+            Comment { x: clang_Cursor_getParsedComment(self.x) }
+        }
+    }
+
     pub fn cur_type(&self) -> Type {
         unsafe {
             Type { x: clang_getCursorType(self.x) }
@@ -361,6 +367,56 @@ impl fmt::Display for SourceLocation {
             col.fmt(f)
         } else {
             "builtin definitions".fmt(f)
+        }
+    }
+}
+
+// Comment
+pub struct Comment {
+    x: CXComment
+}
+
+impl Comment {
+    pub fn kind(&self) -> Enum_CXCommentKind {
+        unsafe {
+            clang_Comment_getKind(self.x)
+        }
+    }
+
+    pub fn num_children(&self) -> c_uint {
+        unsafe {
+            clang_Comment_getNumChildren(self.x)
+        }
+    }
+
+    pub fn get_child(&self, idx: c_uint) -> Comment {
+        unsafe {
+            Comment { x: clang_Comment_getChild(self.x, idx) }
+        }
+    }
+
+    // HTML
+    pub fn get_tag_name(&self) -> String {
+        unsafe {
+            String_ { x: clang_HTMLTagComment_getTagName(self.x) }.to_string()
+        }
+    }
+
+    pub fn get_num_tag_attrs(&self) -> c_uint {
+        unsafe {
+            clang_HTMLStartTag_getNumAttrs(self.x)
+        }
+    }
+
+    pub fn get_tag_attr_name(&self, idx: c_uint) -> String {
+        unsafe {
+            String_ { x: clang_HTMLStartTag_getAttrName(self.x, idx) }.to_string()
+        }
+    }
+
+    pub fn get_tag_attr_value(&self, idx: c_uint) -> String {
+        unsafe {
+            String_ { x: clang_HTMLStartTag_getAttrValue(self.x, idx) }.to_string()
         }
     }
 }

@@ -11,7 +11,7 @@ use syntax::abi;
 use types as il;
 use types::*;
 use clang as cx;
-use clang::{ast_dump, Cursor, Diagnostic, TranslationUnit, type_to_str, kind_to_str};
+use clang::{ast_dump, Comment, Cursor, Diagnostic, TranslationUnit, type_to_str, kind_to_str};
 use clangll::*;
 
 use super::Logger;
@@ -365,6 +365,41 @@ fn opaque_ty(ctx: &mut ClangParserCtx, ty: &cx::Type) {
     }
 }
 
+struct Annotations {
+    opaque: bool,
+}
+
+impl Annotations {
+    fn new(cursor: &Cursor) -> Annotations {
+        let mut anno = Annotations {
+            opaque: false,
+        };
+
+        anno.parse(&cursor.comment());
+        anno
+    }
+
+    fn parse(&mut self, comment: &Comment) {
+        if comment.kind() == CXComment_HTMLStartTag &&
+           comment.get_tag_name() == "div" &&
+           comment.get_num_tag_attrs() > 1 &&
+           comment.get_tag_attr_name(0) == "bindgen" {
+            for i in 0..comment.get_num_tag_attrs() {
+                let name = comment.get_tag_attr_name(i);
+                let value = comment.get_tag_attr_value(i);
+
+                if name == "opaque" {
+                    self.opaque = true;
+                }
+            }
+        }
+
+        for i in 0..comment.num_children() {
+            self.parse(&comment.get_child(i));
+        }
+    }
+}
+
 /// Recursively visits a cursor that represents a composite (struct or union)
 /// type and fills members with CompMember instances representing the fields and
 /// nested composites that make up the visited composite.
@@ -498,6 +533,7 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
             ci.args.push(TNamed(Rc::new(RefCell::new(TypeInfo::new(cursor.spelling(), TVoid, layout)))));
         }
         CXCursor_EnumDecl => {
+            let anno = Annotations::new(cursor);
             fwd_decl(ctx, cursor, |ctx_| {
                 let decl = decl_name(ctx_, cursor);
                 let ei = decl.enuminfo();
@@ -505,6 +541,9 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
                     let mut ei_ = ei.borrow_mut();
                     visit_enum(c, &mut ei_.items)
                 });
+                if anno.opaque {
+                    ei.borrow_mut().items = vec!();
+                }
                 ci.members.push(CompMember::Enum(ei));
             });
         }
@@ -677,6 +716,7 @@ fn visit_top(cursor: &Cursor,
             return CXChildVisit_Recurse;
         }
         CXCursor_StructDecl | CXCursor_UnionDecl | CXCursor_ClassDecl | CXCursor_ClassTemplate => {
+            let anno = Annotations::new(cursor);
             fwd_decl(ctx, cursor, |ctx_| {
                 let decl = decl_name(ctx_, cursor);
                 let ci = decl.compinfo();
@@ -684,6 +724,9 @@ fn visit_top(cursor: &Cursor,
                     let mut ci_ = ci.borrow_mut();
                     visit_composite(c, p, ctx_, &mut ci_)
                 });
+                if anno.opaque {
+                    ci.borrow_mut().members = vec!();
+                }
                 ctx_.globals.push(GComp(ci));
             });
             CXChildVisit_Continue
