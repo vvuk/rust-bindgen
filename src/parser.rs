@@ -362,12 +362,14 @@ fn opaque_ty(ctx: &mut ClangParserCtx, ty: &cx::Type) {
 
 struct Annotations {
     opaque: bool,
+    hide: bool,
 }
 
 impl Annotations {
     fn new(cursor: &Cursor) -> Annotations {
         let mut anno = Annotations {
             opaque: false,
+            hide: false,
         };
 
         anno.parse(&cursor.comment());
@@ -378,13 +380,14 @@ impl Annotations {
         if comment.kind() == CXComment_HTMLStartTag &&
            comment.get_tag_name() == "div" &&
            comment.get_num_tag_attrs() > 1 &&
-           comment.get_tag_attr_name(0) == "bindgen" {
+           comment.get_tag_attr_name(0) == "rustbindgen" {
             for i in 0..comment.get_num_tag_attrs() {
                 let name = comment.get_tag_attr_name(i);
-                let value = comment.get_tag_attr_value(i);
 
-                if name == "opaque" {
-                    self.opaque = true;
+                match name.as_str() {
+                    "opaque" => self.opaque = true,
+                    "hide" => self.hide = true,
+                    _ => (),
                 }
             }
         }
