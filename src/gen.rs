@@ -846,12 +846,24 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
             continue;
         }
 
-        let (opt_rc_c, opt_f) = match m {
-            &CompMember::Field(ref f) => { (None, Some(f)) }
-            &CompMember::Comp(ref rc_c) => { (Some(rc_c), None) }
-            &CompMember::CompField(ref rc_c, ref f) => { (Some(rc_c), Some(f)) }
-            _ => unreachable!()
-        };
+        fn comp_fields(m: &CompMember)
+                       -> (Option<Rc<RefCell<CompInfo>>>, Option<FieldInfo>) {
+            match m {
+                &CompMember::Field(ref f) => { (None, Some(f.clone())) }
+                &CompMember::Comp(ref rc_c) => {
+                    let c = rc_c.borrow();
+                    if c.members.len() == 1 {
+                        comp_fields(&c.members[0])
+                    } else {
+                        (Some(rc_c.clone()), None)
+                    }
+                }
+                &CompMember::CompField(ref rc_c, ref f) => { (Some(rc_c.clone()), Some(f.clone())) }
+                _ => unreachable!()
+            }
+        }
+
+        let (opt_rc_c, opt_f) = comp_fields(m);
 
         if let Some(f) = opt_f {
             if cty_has_destructor(&f.ty) {
@@ -877,7 +889,22 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
                 setters.push(P(gen_fullbitfield_method(ctx, &f_name, &f.ty, bitfields)))
             }
 
-            let f_ty = P(cty_to_rs(ctx, &f.ty, f.bitfields == None));
+            let mut bypass = false;
+            let f_ty = if let Some(ref rc_c) = opt_rc_c {
+                if rc_c.borrow().members.len() == 1 {
+                    if let CompMember::Field(ref inner_f) = rc_c.borrow().members[0] {
+                        bypass = true;
+                        inner_f.ty.clone()
+                    } else {
+                        f.ty.clone()
+                    }
+                } else {
+                    f.ty.clone()
+                }
+            } else {
+                f.ty.clone()
+            };
+            let f_ty = P(cty_to_rs(ctx, &f_ty, f.bitfields == None));
 
             fields.push(respan(ctx.span, ast::StructField_ {
                 kind: ast::NamedField(
@@ -888,6 +915,9 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
                 ty: f_ty,
                 attrs: mk_doc_attr(ctx, f.comment.clone())
             }));
+            if bypass {
+                continue;
+            }
         }
 
         if let Some(rc_c) = opt_rc_c {
