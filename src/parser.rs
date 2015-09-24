@@ -271,6 +271,14 @@ fn conv_decl_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il:
             let ci = decl.compinfo();
             if !args.is_empty() {
                 ci.borrow_mut().args = args;
+                cursor.visit(|c, _: &Cursor| {
+                    if c.kind() != CXCursor_TemplateRef {
+                        return CXChildVisit_Continue;
+                    }
+                    let cref = c.definition();
+                    ci.borrow_mut().ref_template = Some(conv_decl_ty(ctx, &cref.cur_type(), &cref));
+                    CXChildVisit_Continue
+                });
             }
             TComp(ci)
         }
@@ -650,6 +658,9 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
             } else {
                 ci.methods.push(vi);
             }
+        }
+        CXCursor_Destructor => {
+            ci.has_destructor = true;
         }
         _ => {
             // XXX: Some kind of warning would be nice, but this produces far
