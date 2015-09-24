@@ -985,10 +985,6 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
                 span: ctx.span}));
     }
 
-    if args.is_empty() {
-        items.push(mk_clone_impl(ctx, &name[..]));
-        items.push(mk_default_impl(ctx, &name));
-    }
     items.extend(extra.into_iter());
 
     let mut mangledlist = vec!();
@@ -1088,8 +1084,6 @@ fn cunion_to_rs(ctx: &mut GenCtx, name: String, layout: Layout, members: Vec<Com
         mk_item(ctx, "".to_string(), union_impl, ast::Inherited, Vec::new())
     );
 
-    items.push(mk_clone_impl(ctx, &name[..]));
-    items.push(mk_default_impl(ctx, &name));
     items.extend(extra.into_iter());
     items
 }
@@ -1341,30 +1335,6 @@ fn gen_fullbitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
         node: node,
         span: ctx.span,
     }
-}
-
-// Implements std::default::Default using std::mem::zeroed.
-fn mk_default_impl(ctx: &GenCtx, ty_name: &str) -> P<ast::Item> {
-    let impl_str = format!(r"
-        impl ::std::default::Default for {} {{
-            fn default() -> Self {{ unsafe {{ ::std::mem::zeroed() }} }}
-        }}
-    ", ty_name);
-
-    parse::new_parser_from_source_str(ctx.ext_cx.parse_sess(),
-        ctx.ext_cx.cfg(), "".to_string(), impl_str).parse_item().unwrap()
-}
-
-// Implements std::clone::Clone using dereferencing
-fn mk_clone_impl(ctx: &GenCtx, ty_name: &str) -> P<ast::Item> {
-    let impl_str = format!(r"
-        impl ::std::clone::Clone for {} {{
-            fn clone(&self) -> Self {{ *self }}
-        }}
-    ", ty_name);
-
-    parse::new_parser_from_source_str(ctx.ext_cx.parse_sess(),
-        ctx.ext_cx.cfg(), "".to_string(), impl_str).parse_item().unwrap()
 }
 
 fn mk_blob_field(ctx: &GenCtx, name: &str, layout: Layout) -> Spanned<ast::StructField_> {
