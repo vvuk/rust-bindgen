@@ -730,6 +730,9 @@ fn visit_top(cursor: &Cursor,
                 if anno.opaque {
                     ci.borrow_mut().members = vec!();
                 }
+                if anno.hide {
+                    ci.borrow_mut().hide = true;
+                }
                 ctx_.globals.push(GComp(ci));
             });
             CXChildVisit_Continue

@@ -669,7 +669,11 @@ fn ctypedef_to_rs(
         -> Vec<P<ast::Item>> {
     fn mk_item(ctx: &mut GenCtx, name: String, ty: &Type) -> P<ast::Item> {
         let rust_name = rust_type_id(ctx, name);
-        let rust_ty = cty_to_rs(ctx, ty, true);
+        let rust_ty = if cty_is_translatable(ty) {
+            cty_to_rs(ctx, ty, true)
+        } else {
+            cty_to_rs(ctx, &TVoid, true)
+        };
         let base = ast::ItemTy(
             P(ast::Ty {
                 id: ast::DUMMY_NODE_ID,
@@ -735,6 +739,11 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
     let mut extra = vec!();
     let mut unnamed: u32 = 0;
     let mut bitfields: u32 = 0;
+
+    if ci.hide ||
+       args.iter().any(|f| match *f { TVoid => true, _ => false }) {
+        return vec!();
+    }
 
     let id = rust_type_id(ctx, name.clone());
     let id_ty = P(mk_ty(ctx, false, vec!(id.clone())));
@@ -857,6 +866,9 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
         };
 
         if let Some(f) = opt_f {
+            if !cty_is_translatable(&f.ty) {
+                continue;
+            }
             let f_name = match f.bitfields {
                 Some(_) => {
                     bitfields += 1;
@@ -1676,6 +1688,20 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
             e.name = unnamed_name(ctx, e.name.clone(), e.filename.clone());
             mk_ty(ctx, false, vec!(enum_name(&e.name)))
         }
+    }
+}
+
+fn cty_is_translatable(ty: &Type) -> bool {
+    match ty {
+        &TVoid => false,
+        &TArray(ref t, _, _) => {
+            cty_is_translatable(&**t)
+        },
+        &TComp(ref ci) => {
+            let c = ci.borrow();
+            !c.args.iter().any(|gt| gt == &TVoid)
+        },
+        _ => true,
     }
 }
 
