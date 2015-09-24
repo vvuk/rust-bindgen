@@ -1430,14 +1430,12 @@ fn mk_repr_attr(ctx: &mut GenCtx, layout: Layout) -> ast::Attribute {
     })
 }
 
-fn mk_deriving_copy_attr(ctx: &mut GenCtx, clone: bool) -> ast::Attribute {
-    let mut words = vec!();
-    if clone {
-        words.push(ctx.ext_cx.meta_word(ctx.span, InternedString::new("Clone")));
-    }
-    words.push(ctx.ext_cx.meta_word(ctx.span, InternedString::new("Copy")));
-
-    let attr_val = ctx.ext_cx.meta_list(ctx.span, InternedString::new("derive"), words);
+fn mk_deriving_copy_attr(ctx: &mut GenCtx) -> ast::Attribute {
+    let attr_val = P(respan(ctx.span, ast::MetaList(
+        to_intern_str(ctx, "derive".to_string()),
+        vec!(P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "Copy".to_string())))),
+             P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "Clone".to_string())))))
+    )));
 
     respan(ctx.span, ast::Attribute_ {
         id: mk_attr_id(),
