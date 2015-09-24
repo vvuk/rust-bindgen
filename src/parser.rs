@@ -420,6 +420,10 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
 
     match cursor.kind() {
         CXCursor_FieldDecl => {
+            let anno = Annotations::new(cursor);
+            if anno.hide {
+                return CXChildVisit_Continue;
+            }
             let ty = conv_ty(ctx, &cursor.cur_type(), cursor);
             let comment = cursor.raw_comment();
 
