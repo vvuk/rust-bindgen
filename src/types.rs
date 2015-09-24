@@ -187,6 +187,7 @@ pub struct CompInfo {
     pub methods: Vec<VarInfo>,
     pub vmethods: Vec<VarInfo>,
     pub has_vtable: bool,
+    pub hide: bool,
     pub base_members: usize,
     pub layout: Layout,
 }
@@ -203,6 +204,7 @@ impl CompInfo {
             methods: vec!(),
             vmethods: vec!(),
             has_vtable: false,
+            hide: false,
             base_members: 0,
             layout: layout,
         }
