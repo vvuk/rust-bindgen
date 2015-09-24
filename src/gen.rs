@@ -1609,13 +1609,15 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
             FFloat => mk_ty(ctx, false, vec!("f32".to_string())),
             FDouble => mk_ty(ctx, false, vec!("f64".to_string()))
         },
-        &TPtr(ref t, is_const, is_ref, _) => {
+        &TPtr(ref t, is_const, _is_ref, _) => {
             let id = cty_to_rs(ctx, &**t, allow_bool);
+/*
             if is_ref {
                 mk_refty(ctx, &id, is_const)
             } else {
+*/
                 mk_ptrty(ctx, &id, is_const)
-            }
+//            }
         },
         &TArray(ref t, s, _) => {
             let ty = cty_to_rs(ctx, &**t, allow_bool);
