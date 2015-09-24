@@ -844,6 +844,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
 
     let mut anon_enum_count = 0;
     let mut setters = vec!();
+    let mut has_destructor = ci.has_destructor;
     for m in members.iter() {
         if let &CompMember::Enum(ref ei) = m {
             let e = ei.borrow().clone();
@@ -866,6 +867,9 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
         };
 
         if let Some(f) = opt_f {
+            if cty_has_destructor(&f.ty) {
+                has_destructor = true;
+            }
             if !cty_is_translatable(&f.ty) {
                 continue;
             }
@@ -962,7 +966,9 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
 
     let mut attrs = mk_doc_attr(ctx, ci.comment);
     attrs.push(mk_repr_attr(ctx, layout));
-    attrs.push(mk_deriving_copy_attr(ctx));
+    if !has_destructor {
+        attrs.push(mk_deriving_copy_attr(ctx));
+    }
     let struct_def = P(ast::Item { ident: ctx.ext_cx.ident_of(&id),
         attrs: attrs,
         id: ast::DUMMY_NODE_ID,
@@ -1702,6 +1708,34 @@ fn cty_is_translatable(ty: &Type) -> bool {
             !c.args.iter().any(|gt| gt == &TVoid)
         },
         _ => true,
+    }
+}
+
+fn cty_has_destructor(ty: &Type) -> bool {
+    match ty {
+        &TArray(ref t, _, _) => {
+            cty_has_destructor(&**t)
+        }
+        &TComp(ref ci) => {
+            let c = ci.borrow();
+            if c.has_destructor || c.members.iter().any(|f| match f {
+                &CompMember::Field(ref f) |
+                &CompMember::CompField(_, ref f) =>
+                    cty_has_destructor(&f.ty),
+                _ => false,
+            }) {
+                return true;
+            }
+            if let Some(ref ty) = c.ref_template {
+                true
+            } else {
+                false
+            }
+        },
+        &TNamed(ref ti) => {
+            cty_has_destructor(&ti.borrow().ty)
+        },
+        _ => false,
     }
 }
 
