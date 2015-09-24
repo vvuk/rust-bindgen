@@ -1402,7 +1402,8 @@ fn mk_repr_attr(ctx: &mut GenCtx, layout: Layout) -> ast::Attribute {
 fn mk_deriving_copy_attr(ctx: &mut GenCtx) -> ast::Attribute {
     let attr_val = P(respan(ctx.span, ast::MetaList(
         to_intern_str(ctx, "derive".to_string()),
-        vec!(P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "Copy".to_string())))))
+        vec!(P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "Copy".to_string())))),
+             P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "Clone".to_string())))))
     )));
 
     respan(ctx.span, ast::Attribute_ {
