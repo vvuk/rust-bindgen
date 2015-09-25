@@ -180,6 +180,13 @@ impl Cursor {
         }
     }
 
+    // CXX member
+    pub fn access_specifier(&self) -> Enum_CX_CXXAccessSpecifier {
+        unsafe {
+            clang_getCXXAccessSpecifier(self.x)
+        }
+    }
+
     // CXX method
     pub fn method_is_static(&self) -> bool {
         unsafe {

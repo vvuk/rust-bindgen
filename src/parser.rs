@@ -604,6 +604,10 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
                 return CXChildVisit_Continue;
             }
 
+            if cursor.access_specifier() == CX_CXXPrivate {
+                return CXChildVisit_Continue;
+            }
+
             let spelling = cursor.spelling();
             if spelling.len() > 8 &&
                &(spelling)[..8] == "operator" {
