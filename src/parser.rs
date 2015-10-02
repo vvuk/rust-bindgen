@@ -131,6 +131,10 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                 let vi = Rc::new(RefCell::new(VarInfo::new(spelling, mangled, comment, TVoid)));
                 GVar(vi)
             }
+            CXCursor_MacroDefinition => {
+                let vi = Rc::new(RefCell::new(VarInfo::new(spelling, String::new(), comment, TVoid)));
+                GVar(vi)
+            }
             CXCursor_FunctionDecl => {
                 let mangled = cursor.mangling();
                 let vi = Rc::new(RefCell::new(VarInfo::new(spelling, mangled, comment, TVoid)));
@@ -696,34 +700,36 @@ fn visit_enum(cursor: &Cursor,
     CXChildVisit_Continue
 }
 
-fn visit_literal(cursor: &Cursor, unit: &TranslationUnit) -> Option<i64> {
-    if cursor.kind() == CXCursor_IntegerLiteral {
-        match unit.tokens(cursor) {
-            None => None,
-            Some(tokens) => {
-                if tokens.is_empty() || tokens[0].kind != CXToken_Literal {
-                    None
-                } else {
-                    let s = &tokens[0].spelling;
-                    let parsed = {
-                        //TODO: try to preserve hex literals?
-                        if s.starts_with("0x") {
-                            i64::from_str_radix(&s[2..], 16)
-                        } else {
-                            s.parse()
-                        }
-                    };
-                    match parsed {
-                        Ok(i) => Some(i),
-                        Err(_) => None,
+fn parse_int_literal_tokens(cursor: &Cursor, unit: &TranslationUnit, which: usize) -> Option<i64> {
+    match unit.tokens(cursor) {
+        None => None,
+        Some(tokens) => {
+            if tokens.len() <= which || tokens[which].kind != CXToken_Literal {
+                None
+            } else {
+                let ref s = tokens[which].spelling;
+                let parsed = {
+                    //TODO: try to preserve hex literals?
+                    if s.starts_with("0x") {
+                        i64::from_str_radix(&s[2..], 16)
+                    } else {
+                        s.parse()
                     }
+                };
+                match parsed {
+                    Ok(i) => Some(i),
+                    Err(_) => None,
                 }
             }
         }
     }
-    else {
-        None
+}
+
+fn visit_literal(cursor: &Cursor, unit: &TranslationUnit) -> Option<i64> {
+    if cursor.kind() == CXCursor_IntegerLiteral {
+        return parse_int_literal_tokens(cursor, unit, 0);
     }
+    return None;
 }
 
 fn visit_top(cursor: &Cursor,
@@ -845,6 +851,26 @@ fn visit_top(cursor: &Cursor,
         CXCursor_Namespace => {
             return CXChildVisit_Recurse;
         }
+        CXCursor_MacroDefinition => {
+            let val = parse_int_literal_tokens(cursor, unit, 1);
+            if val.is_none() {
+                // Not an integer literal.
+                return CXChildVisit_Continue;
+            }
+            let var = decl_name(ctx, cursor);
+            let vi = var.varinfo();
+            let mut vi = vi.borrow_mut();
+            vi.ty = match val {
+                None => TVoid,
+                Some(v) if v.abs() > u32::max_value() as i64 => TInt(IULongLong, Layout::new(8, 8)),
+                _ => TInt(IUInt, Layout::new(4, 4)),
+            };
+            vi.is_const = true;
+            vi.val = val;
+            ctx.globals.push(var);
+
+            return CXChildVisit_Continue;
+        }
         _ => return CXChildVisit_Continue,
     }
 }
@@ -874,7 +900,7 @@ pub fn parse(options: ClangParserOptions, logger: &Logger) -> Result<Vec<Global>
         return Err(())
     }
 
-    let unit = TranslationUnit::parse(&ix, "", &ctx.options.clang_args[..], &[], 0);
+    let unit = TranslationUnit::parse(&ix, "", &ctx.options.clang_args[..], &[], CXTranslationUnit_DetailedPreprocessingRecord);
     if unit.is_null() {
         ctx.logger.error("No input files given");
         return Err(())
