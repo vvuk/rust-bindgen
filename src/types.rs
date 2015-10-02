@@ -355,6 +355,11 @@ pub struct VarInfo {
 
 impl VarInfo {
     pub fn new(name: String, mangled: String, comment: String, ty: Type) -> VarInfo {
+        let mangled = if name == mangled {
+            String::new()
+        } else {
+            mangled
+        };
         VarInfo {
             name: name,
             mangled: mangled,

@@ -30,8 +30,8 @@ impl Cursor {
             String_ { x: clang_Cursor_getMangling(self.x) }.to_string()
         };
 
-        // On OSX, we get an extra underscore for some reason..
-        if mangling.len() >= 3 && &mangling[0..3] == "__Z" {
+        // Try to undo backend mangling
+        if cfg!(target_os = "macos") || cfg!(target_os = "windows") {
             mangling.remove(0);
         }
         mangling
