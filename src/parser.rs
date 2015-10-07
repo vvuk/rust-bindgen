@@ -556,6 +556,7 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
             fwd_decl(ctx, cursor, |ctx_| {
                 let decl = decl_name(ctx_, cursor);
                 let ei = decl.enuminfo();
+                ei.borrow_mut().comment = cursor.raw_comment();
                 cursor.visit(|c, _: &Cursor| {
                     let mut ei_ = ei.borrow_mut();
                     visit_enum(c, &mut ei_.items)
@@ -767,6 +768,7 @@ fn visit_top(cursor: &Cursor,
             fwd_decl(ctx, cursor, |ctx_| {
                 let decl = decl_name(ctx_, cursor);
                 let ei = decl.enuminfo();
+                ei.borrow_mut().comment = cursor.raw_comment();
                 cursor.visit(|c, _: &Cursor| {
                     let mut ei_ = ei.borrow_mut();
                     visit_enum(c, &mut ei_.items)
