@@ -1154,7 +1154,7 @@ fn cenum_to_rs(ctx: &mut GenCtx, name: String, items: Vec<EnumItem>, layout: Lay
 
         let variant = respan(ctx.span, ast::Variant_ {
             name: ctx.ext_cx.ident_of(&it.name),
-            attrs: vec!(),
+            attrs: mk_doc_attr(ctx, it.comment.clone()),
             kind: ast::TupleVariantKind(vec!()),
             id: ast::DUMMY_NODE_ID,
             disr_expr: Some(P(ast::Expr {
