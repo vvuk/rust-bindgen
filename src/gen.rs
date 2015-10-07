@@ -347,7 +347,7 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
                     e.name = unnamed_name(&mut ctx, e.name.clone(), e.filename.clone());
                 }
                 let e = ei.borrow().clone();
-                defs.extend(cenum_to_rs(&mut ctx, enum_name(&e.name), e.items, e.layout).into_iter())
+                defs.extend(cenum_to_rs(&mut ctx, enum_name(&e.name), e.comment, e.items, e.layout).into_iter())
             },
             GVar(vi) => {
                 let v = vi.borrow();
@@ -696,7 +696,7 @@ fn ctypedef_to_rs(ctx: &mut GenCtx, name: String, comment: String, ty: &Type) ->
             if is_empty {
                 ei.borrow_mut().name = name.clone();
                 let e = ei.borrow().clone();
-                cenum_to_rs(ctx, name, e.items, e.layout)
+                cenum_to_rs(ctx, name, e.comment, e.items, e.layout)
             } else {
                 vec!(mk_item(ctx, name, comment, ty))
             }
@@ -842,7 +842,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
             } else {
                 e.name.clone()
             };
-            extra.extend(cenum_to_rs(ctx, ename, e.items, e.layout).into_iter());
+            extra.extend(cenum_to_rs(ctx, ename, e.comment, e.items, e.layout).into_iter());
             continue;
         }
 
@@ -1140,7 +1140,7 @@ fn const_to_rs(ctx: &mut GenCtx, name: String, val: i64, val_ty: ast::Ty) -> P<a
     })
 }
 
-fn cenum_to_rs(ctx: &mut GenCtx, name: String, items: Vec<EnumItem>, layout: Layout) -> Vec<P<ast::Item>> {
+fn cenum_to_rs(ctx: &mut GenCtx, name: String, comment: String, items: Vec<EnumItem>, layout: Layout) -> Vec<P<ast::Item>> {
     // Rust is not happy with univariant enums
     if items.len() < 2 {
         return vec!();
@@ -1175,18 +1175,22 @@ fn cenum_to_rs(ctx: &mut GenCtx, name: String, items: Vec<EnumItem>, layout: Lay
         _ => "i32",
     };
 
+    let mut attrs = mk_doc_attr(ctx, comment);
+    attrs.push(respan(ctx.span, ast::Attribute_ {
+        id: mk_attr_id(),
+        style: ast::AttrOuter,
+        value: P(respan(ctx.span, ast::MetaList(
+            to_intern_str(ctx, "repr".to_string()),
+            vec!(P(respan(ctx.span,
+                          ast::MetaWord(to_intern_str(ctx, enum_ty.to_string())))))
+        ))),
+        is_sugared_doc: false
+    }));
+    attrs.push(mk_deriving_copy_attr(ctx));
+
     vec!(P(ast::Item {
         ident: ctx.ext_cx.ident_of(&name),
-        attrs: vec!(respan(ctx.span, ast::Attribute_ {
-            id: mk_attr_id(),
-            style: ast::AttrOuter,
-            value: P(respan(ctx.span, ast::MetaList(
-                to_intern_str(ctx, "repr".to_string()),
-                vec!(P(respan(ctx.span,
-                              ast::MetaWord(to_intern_str(ctx, enum_ty.to_string())))))
-            ))),
-            is_sugared_doc: false
-        }), mk_deriving_copy_attr(ctx)),
+        attrs: attrs,
         id: ast::DUMMY_NODE_ID,
         node: ast::ItemEnum(ast::EnumDef { variants: variants }, empty_generics()),
         vis: ast::Public,

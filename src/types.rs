@@ -243,6 +243,7 @@ impl FieldInfo {
 #[derive(Clone, PartialEq)]
 pub struct EnumInfo {
     pub name: String,
+    pub comment: String,
     pub filename: String,
     pub items: Vec<EnumItem>,
     pub kind: IKind,
@@ -253,6 +254,7 @@ impl EnumInfo {
     pub fn new(name: String, filename: String, kind: IKind, items: Vec<EnumItem>, layout: Layout) -> EnumInfo {
         EnumInfo {
             name: name,
+            comment: String::new(),
             filename: filename,
             items: items,
             kind: kind,
