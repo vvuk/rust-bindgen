@@ -835,6 +835,7 @@ fn visit_top<'r>(cursor: &Cursor,
             let ti = typedef.typeinfo();
             let mut ti = ti.borrow_mut();
             ti.ty = ty.clone();
+            ti.comment = cursor.raw_comment();
             ctx.globals.push(typedef);
 
             opaque_ty(ctx, &under_ty);
