@@ -323,6 +323,7 @@ impl EnumItem {
 #[derive(Clone, PartialEq)]
 pub struct TypeInfo {
     pub name: String,
+    pub comment: String,
     pub ty: Type,
     pub layout: Layout,
 }
@@ -331,6 +332,7 @@ impl TypeInfo {
     pub fn new(name: String, ty: Type, layout: Layout) -> TypeInfo {
         TypeInfo {
             name: name,
+            comment: String::new(),
             ty: ty,
             layout: layout,
         }

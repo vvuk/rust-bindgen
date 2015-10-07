@@ -316,12 +316,8 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
     for g in gs.into_iter() {
         match g {
             GType(ti) => {
-                let t = ti.borrow();
-                defs.extend(ctypedef_to_rs(
-                    &mut ctx,
-                    options.rust_enums,
-                    options.derive_debug,
-                    t.name.clone(), &t.ty))
+                let t = ti.borrow().clone();
+                defs.extend(ctypedef_to_rs(&mut ctx, t.name.clone(), t.comment.clone(), &t.ty).into_iter())
             },
             GCompDecl(ci) => {
                 {
@@ -660,14 +656,8 @@ fn tag_dup_decl(gs: Vec<Global>) -> Vec<Global> {
     res
 }
 
-fn ctypedef_to_rs(
-        ctx: &mut GenCtx,
-        rust_enums: bool,
-        derive_debug: bool,
-        name: String,
-        ty: &Type)
-        -> Vec<P<ast::Item>> {
-    fn mk_item(ctx: &mut GenCtx, name: String, ty: &Type) -> P<ast::Item> {
+fn ctypedef_to_rs(ctx: &mut GenCtx, name: String, comment: String, ty: &Type) -> Vec<P<ast::Item>> {
+    fn mk_item(ctx: &mut GenCtx, name: String, comment: String, ty: &Type) -> P<ast::Item> {
         let rust_name = rust_type_id(ctx, name);
         let rust_ty = if cty_is_translatable(ty) {
             cty_to_rs(ctx, ty, true)
@@ -685,7 +675,7 @@ fn ctypedef_to_rs(
 
         return P(ast::Item {
                   ident: ctx.ext_cx.ident_of(&rust_name),
-                  attrs: Vec::new(),
+                  attrs: mk_doc_attr(ctx, comment),
                   id: ast::DUMMY_NODE_ID,
                   node: base,
                   vis: ast::Public,
@@ -701,7 +691,7 @@ fn ctypedef_to_rs(
                 let c = ci.borrow().clone();
                 comp_to_rs(ctx, name, c)
             } else {
-                vec!(mk_item(ctx, name, ty))
+                vec!(mk_item(ctx, name, comment, ty))
             }
         },
         TEnum(ref ei) => {
@@ -711,10 +701,10 @@ fn ctypedef_to_rs(
                 let e = ei.borrow().clone();
                 cenum_to_rs(ctx, name, e.items, e.layout)
             } else {
-                vec!(mk_item(ctx, name, ty))
+                vec!(mk_item(ctx, name, comment, ty))
             }
         },
-        _ => vec!(mk_item(ctx, name, ty))
+        _ => vec!(mk_item(ctx, name, comment, ty))
     }
 }
 
