@@ -306,13 +306,15 @@ impl fmt::Debug for EnumInfo {
 #[derive(Clone, PartialEq)]
 pub struct EnumItem {
     pub name: String,
+    pub comment: String,
     pub val: i64
 }
 
 impl EnumItem {
-    pub fn new(name: String, val: i64) -> EnumItem {
+    pub fn new(name: String, comment: String, val: i64) -> EnumItem {
         EnumItem {
             name: name,
+            comment: comment,
             val: val
         }
     }

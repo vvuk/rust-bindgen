@@ -693,8 +693,9 @@ fn visit_enum(cursor: &Cursor,
               items: &mut Vec<EnumItem>) -> Enum_CXVisitorResult {
     if cursor.kind() == CXCursor_EnumConstantDecl {
         let name = cursor.spelling();
+        let comment = cursor.raw_comment();
         let val = cursor.enum_val();
-        let item = EnumItem::new(name, val);
+        let item = EnumItem::new(name, comment, val);
         items.push(item);
     }
     CXChildVisit_Continue
