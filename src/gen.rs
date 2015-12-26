@@ -14,6 +14,7 @@ use syntax::ext::quote::rt::ToTokens;
 use syntax::feature_gate::Features;
 use syntax::owned_slice::OwnedSlice;
 use syntax::parse;
+use syntax::parse::token::{InternedString, intern};
 use syntax::attr::mk_attr_id;
 use syntax::ptr::P;
 use syntax::print::pprust::tts_to_string;
@@ -33,11 +34,6 @@ fn first<A, B>((val, _): (A, B)) -> A {
 
 fn ref_eq<'a, 'b, T>(thing: &'a T, other: &'b T) -> bool {
     (thing as *const T) == (other as *const T)
-}
-
-fn to_intern_str(ctx: &mut GenCtx, s: String) -> parse::token::InternedString {
-    let id = ctx.ext_cx.ident_of(&s);
-    parse::token::get_ident(id)
 }
 
 fn empty_generics() -> ast::Generics {
@@ -174,7 +170,8 @@ fn gen_unmangle_method(ctx: &mut GenCtx,
                             parameters: ast::PathParameters::none()
                         })
                     }),
-                    span: ctx.span
+                    span: ctx.span,
+                    attrs: None,
                 };
                 args.push(P(expr));
             }
@@ -206,11 +203,13 @@ fn gen_unmangle_method(ctx: &mut GenCtx,
                             parameters: ast::PathParameters::none()
                         })
                     }),
-                    span: ctx.span
+                    span: ctx.span,
+                    attrs: None,
                 }),
                 args
             ),
-            span: ctx.span
+            span: ctx.span,
+            attrs: None,
         })),
         id: ast::DUMMY_NODE_ID,
         rules: ast::DefaultBlock,
@@ -232,8 +231,8 @@ fn gen_unmangle_method(ctx: &mut GenCtx,
     let mut attrs = mk_doc_attr(ctx, v.comment.clone());
     attrs.push(respan(ctx.span, ast::Attribute_ {
         id: mk_attr_id(),
-        style: ast::AttrOuter,
-        value: P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "inline".to_string()))
+        style: ast::AttrStyle::Outer,
+        value: P(respan(ctx.span, ast::MetaWord(InternedString::new("inline"))
         )),
         is_sugared_doc: false
     }));
@@ -243,7 +242,7 @@ fn gen_unmangle_method(ctx: &mut GenCtx,
         ident: ctx.ext_cx.ident_of(&name),
         vis: ast::Public,
         attrs: attrs,
-        node: ast::MethodImplItem(sig, P(block)),
+        node: ast::ImplItemKind::Method(sig, P(block)),
         span: ctx.span
     };
     P(item)
@@ -260,20 +259,16 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
         trace_mac: false,
     };
     let sess = &parse::ParseSess::new();
+    let mut feature_gated_cfgs = vec![];
     let mut ctx = GenCtx {
-        ext_cx: base::ExtCtxt::new(
-            sess,
-            Vec::new(),
-            cfg,
-        ),
+        ext_cx: base::ExtCtxt::new(sess, Vec::new(), cfg, &mut feature_gated_cfgs),
         unnamed_ty: 0,
         span: span
     };
     ctx.ext_cx.bt_push(ExpnInfo {
         call_site: ctx.span,
         callee: NameAndSpan {
-            name: String::new(),
-            format: MacroBang,
+            format: MacroBang(intern("")),
             allow_internal_unstable: false,
             span: None
         }
@@ -440,27 +435,21 @@ fn mk_extern(ctx: &mut GenCtx, links: &[(String, LinkType)],
                 &LinkType::Framework => Some("framework")
             };
             let link_name = P(respan(ctx.span, ast::MetaNameValue(
-                to_intern_str(ctx, "name".to_string()),
-                respan(ctx.span, ast::LitStr(
-                    to_intern_str(ctx, l.to_string()),
-                    ast::CookedStr
-                ))
+                InternedString::new("name"),
+                respan(ctx.span, ast::LitStr(intern(l).as_str(), ast::CookedStr))
             )));
             let link_args = match k {
                 None => vec!(link_name),
                 Some(ref k) => vec!(link_name, P(respan(ctx.span, ast::MetaNameValue(
-                    to_intern_str(ctx, "kind".to_string()),
-                    respan(ctx.span, ast::LitStr(
-                        to_intern_str(ctx, k.to_string()),
-                        ast::CookedStr
-                    ))
+                    InternedString::new("kind"),
+                    respan(ctx.span, ast::LitStr(intern(k).as_str(), ast::CookedStr))
                 ))))
             };
             respan(ctx.span, ast::Attribute_ {
                 id: mk_attr_id(),
-                style: ast::AttrOuter,
+                style: ast::AttrStyle::Outer,
                 value: P(respan(ctx.span, ast::MetaList(
-                    to_intern_str(ctx, "link".to_string()),
+                    InternedString::new("link"),
                     link_args)
                 )),
                 is_sugared_doc: false
@@ -790,10 +779,8 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
             attrs: vec!(mk_repr_attr(ctx, layout)),
             id: ast::DUMMY_NODE_ID,
             node: ast::ItemStruct(
-                P(ast::StructDef {
-                    fields: vffields,
-                    ctor_id: None,
-                }), empty_generics()
+                ast::VariantData::Struct(vffields, ast::DUMMY_NODE_ID),
+                empty_generics()
             ),
             vis: ast::Public,
             span: ctx.span,
@@ -950,7 +937,11 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
         }));
     }
 
-    let ctor_id = if fields.is_empty() { Some(ast::DUMMY_NODE_ID) } else { None };
+    let variant_data = if fields.is_empty() {
+        ast::VariantData::Unit(ast::DUMMY_NODE_ID)
+    } else {
+        ast::VariantData::Struct(fields, ast::DUMMY_NODE_ID)
+    };
     let ty_params = args.iter().map(|gt| {
         let name = match gt {
             &TNamed(ref ti) => {
@@ -968,10 +959,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
     }).collect();
 
     let def = ast::ItemStruct(
-        P(ast::StructDef {
-           fields: fields,
-           ctor_id: ctor_id,
-        }),
+        variant_data,
         ast::Generics {
             lifetimes: vec!(),
             ty_params: OwnedSlice::from_vec(ty_params),
@@ -1090,10 +1078,7 @@ fn cunion_to_rs(ctx: &mut GenCtx, name: String, layout: Layout, members: Vec<Com
     let data_field = mk_blob_field(ctx, data_field_name, layout);
 
     let def = ast::ItemStruct(
-        P(ast::StructDef {
-           fields: vec!(data_field),
-           ctor_id: None,
-        }),
+        ast::VariantData::Struct(vec![data_field], ast::DUMMY_NODE_ID),
         empty_generics()
     );
     let union_id = rust_type_id(ctx, name.clone());
@@ -1155,14 +1140,13 @@ fn cenum_to_rs(ctx: &mut GenCtx, name: String, comment: String, items: Vec<EnumI
         let variant = respan(ctx.span, ast::Variant_ {
             name: ctx.ext_cx.ident_of(&it.name),
             attrs: mk_doc_attr(ctx, it.comment.clone()),
-            kind: ast::TupleVariantKind(vec!()),
-            id: ast::DUMMY_NODE_ID,
+            data: ast::VariantData::Unit(ast::DUMMY_NODE_ID),
             disr_expr: Some(P(ast::Expr {
                 id: ast::DUMMY_NODE_ID,
                 node: value_node,
-                span: ctx.span
-            } )),
-            vis: ast::Inherited
+                span: ctx.span,
+                attrs: None,
+            }))
         });
         P(variant)
     }).collect();
@@ -1178,11 +1162,11 @@ fn cenum_to_rs(ctx: &mut GenCtx, name: String, comment: String, items: Vec<EnumI
     let mut attrs = mk_doc_attr(ctx, comment);
     attrs.push(respan(ctx.span, ast::Attribute_ {
         id: mk_attr_id(),
-        style: ast::AttrOuter,
+        style: ast::AttrStyle::Outer,
         value: P(respan(ctx.span, ast::MetaList(
-            to_intern_str(ctx, "repr".to_string()),
+            InternedString::new("repr"),
             vec!(P(respan(ctx.span,
-                          ast::MetaWord(to_intern_str(ctx, enum_ty.to_string())))))
+                          ast::MetaWord(InternedString::new(enum_ty)))))
         ))),
         is_sugared_doc: false
     }));
@@ -1225,7 +1209,7 @@ fn gen_comp_methods(ctx: &mut GenCtx, data_field: &str, data_offset: usize,
             ", f_name, tts_to_string(&ret_ty.to_tokens(&ctx.ext_cx)[..]), data_field, offset);
 
             parse::new_parser_from_source_str(ctx.ext_cx.parse_sess(),
-                ctx.ext_cx.cfg(), "".to_string(), impl_str).parse_item().unwrap()
+                ctx.ext_cx.cfg(), "".to_string(), impl_str).parse_item().unwrap().unwrap()
         };
 
         method.and_then(|i| {
@@ -1314,7 +1298,7 @@ fn gen_fullbitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
             pat: P(ast::Pat {
                 id: ast::DUMMY_NODE_ID,
                 node: ast::PatIdent(
-                    ast::BindByValue(ast::MutImmutable),
+                    ast::BindingMode::ByValue(ast::MutImmutable),
                     respan(ctx.span, ctx.ext_cx.ident_of(name)),
                     None
                 ),
@@ -1350,7 +1334,7 @@ fn gen_fullbitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
         span: ctx.span
     };
 
-    let node = ast::MethodImplItem(
+    let node = ast::ImplItemKind::Method(
         ast::MethodSig {
             unsafety: ast::Unsafety::Normal,
             abi: abi::Rust,
@@ -1399,16 +1383,13 @@ fn mk_blob_field(ctx: &GenCtx, name: &str, layout: Layout) -> Spanned<ast::Struc
 }
 
 fn mk_link_name_attr(ctx: &mut GenCtx, name: String) -> ast::Attribute {
-    let lit = respan(ctx.span, ast::LitStr(
-        to_intern_str(ctx, name),
-        ast::CookedStr
-    ));
+    let lit = respan(ctx.span, ast::LitStr(intern(&name).as_str(), ast::CookedStr));
     let attr_val = P(respan(ctx.span, ast::MetaNameValue(
-        to_intern_str(ctx, "link_name".to_string()), lit
+        InternedString::new("link_name"), lit
     )));
     let attr = ast::Attribute_ {
         id: mk_attr_id(),
-        style: ast::AttrOuter,
+        style: ast::AttrStyle::Outer,
         value: attr_val,
         is_sugared_doc: false
     };
@@ -1416,18 +1397,18 @@ fn mk_link_name_attr(ctx: &mut GenCtx, name: String) -> ast::Attribute {
 }
 
 fn mk_repr_attr(ctx: &mut GenCtx, layout: Layout) -> ast::Attribute {
-    let mut values = vec!(P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "C".to_string())))));
+    let mut values = vec!(P(respan(ctx.span, ast::MetaWord(InternedString::new("C")))));
     if layout.packed {
-        values.push(P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "packed".to_string())))));
+        values.push(P(respan(ctx.span, ast::MetaWord(InternedString::new("packed")))));
     }
     let attr_val = P(respan(ctx.span, ast::MetaList(
-        to_intern_str(ctx, "repr".to_string()),
+        InternedString::new("repr"),
         values
     )));
 
     respan(ctx.span, ast::Attribute_ {
         id: mk_attr_id(),
-        style: ast::AttrOuter,
+        style: ast::AttrStyle::Outer,
         value: attr_val,
         is_sugared_doc: false
     })
@@ -1435,14 +1416,14 @@ fn mk_repr_attr(ctx: &mut GenCtx, layout: Layout) -> ast::Attribute {
 
 fn mk_deriving_copy_attr(ctx: &mut GenCtx) -> ast::Attribute {
     let attr_val = P(respan(ctx.span, ast::MetaList(
-        to_intern_str(ctx, "derive".to_string()),
-        vec!(P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "Copy".to_string())))),
-             P(respan(ctx.span, ast::MetaWord(to_intern_str(ctx, "Clone".to_string())))))
+        InternedString::new("derive"),
+        vec!(P(respan(ctx.span, ast::MetaWord(InternedString::new("Copy")))),
+             P(respan(ctx.span, ast::MetaWord(InternedString::new("Clone")))))
     )));
 
     respan(ctx.span, ast::Attribute_ {
         id: mk_attr_id(),
-        style: ast::AttrOuter,
+        style: ast::AttrStyle::Outer,
         value: attr_val,
         is_sugared_doc: false
     })
@@ -1454,16 +1435,13 @@ fn mk_doc_attr(ctx: &mut GenCtx, doc: String) -> Vec<ast::Attribute> {
     }
 
     let attr_val = P(respan(ctx.span, ast::MetaNameValue(
-        to_intern_str(ctx, "doc".to_string()),
-        respan(ctx.span, ast::LitStr(
-            to_intern_str(ctx, doc),
-            ast::CookedStr,
-        ))
+        InternedString::new("doc"),
+        respan(ctx.span, ast::LitStr(intern(&doc).as_str(), ast::CookedStr))
     )));
 
     vec!(respan(ctx.span, ast::Attribute_ {
         id: mk_attr_id(),
-        style: ast::AttrOuter,
+        style: ast::AttrStyle::Outer,
         value: attr_val,
         is_sugared_doc: true
     }))
@@ -1533,7 +1511,7 @@ fn cfuncty_to_rs(ctx: &mut GenCtx,
             pat: P(ast::Pat {
                  id: ast::DUMMY_NODE_ID,
                  node: ast::PatIdent(
-                     ast::BindByValue(ast::MutImmutable),
+                     ast::BindingMode::ByValue(ast::MutImmutable),
                      respan(ctx.span, ctx.ext_cx.ident_of(&arg_name)),
                      None
                  ),
@@ -1764,7 +1742,8 @@ fn mk_arrty(ctx: &GenCtx, base: &ast::Ty, n: usize) -> ast::Ty {
         P(ast::Expr {
             id: ast::DUMMY_NODE_ID,
             node: sz,
-            span: ctx.span
+            span: ctx.span,
+            attrs: None,
         })
     );
 
