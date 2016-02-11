@@ -8,9 +8,9 @@ It is ported from [clay's bindgen][].
 Requirements
 ------------
 
-* clang 3.7 with patches https://github.com/michaelwu/clang/tree/release_37_smhacks
+* clang 3.7 with patches https://github.com/michaelwu/clang/tree/release_37_smhacks or clang 3.8+
 
-This bindgen fork requires patches to clang to work properly. This is one way to build it:
+This bindgen fork requires a patched clang or clang 3.8+ to work properly. This is one way to build a patched clang:
 ```
 git clone https://github.com/llvm-mirror/llvm
 cd llvm
