@@ -110,6 +110,7 @@ pub struct BindgenOptions {
     pub rust_enums: bool,
     pub links: Vec<(String, LinkType)>,
     pub emit_ast: bool,
+    pub ignore_functions: bool,
     pub fail_on_unknown_type: bool,
     pub override_enum_ty: String,
     pub clang_args: Vec<String>,
@@ -124,6 +125,7 @@ impl Default for BindgenOptions {
             rust_enums: true,
             links: Vec::new(),
             emit_ast: false,
+            ignore_functions: false,
             fail_on_unknown_type: true,
             override_enum_ty: "".to_string(),
             clang_args: Vec::new()
@@ -232,6 +234,7 @@ fn parse_headers(options: &BindgenOptions, logger: &Logger) -> Result<Vec<Global
         builtins: options.builtins,
         match_pat: options.match_pat.clone(),
         emit_ast: options.emit_ast,
+        ignore_functions: options.ignore_functions,
         fail_on_unknown_type: options.fail_on_unknown_type,
         override_enum_ty: str_to_ikind(&options.override_enum_ty),
         clang_args: options.clang_args.clone(),

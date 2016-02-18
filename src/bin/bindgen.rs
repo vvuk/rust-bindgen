@@ -99,12 +99,8 @@ fn parse_args(args: &[String]) -> ParseResult {
                     options.builtins = true;
                     ix += 1;
                 }
-                "-no-rust-enums" => {
-                    options.rust_enums = false;
-                    ix += 1;
-                }
-                "-derive-debug" => {
-                    options.derive_debug = true;
+                "-ignore-functions" => {
+                    options.ignore_functions = true;
                     ix += 1;
                 }
                 "-allow-unknown-types" => {
@@ -146,6 +142,8 @@ Options:
                                matching any rule are bound to.
     -builtins                  Output bindings for builtin definitions
                                (for example __builtin_va_list)
+    -ignore-functions          Don't generate bindings for functions and methods.
+                               This is useful when you only care about struct layouts.
     -allow-unknown-types       Don't fail if we encounter types we do not support,
                                instead treat them as void
     -emit-clang-ast            Output the ast (for debugging purposes)

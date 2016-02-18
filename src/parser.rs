@@ -22,6 +22,7 @@ pub struct ClangParserOptions {
     pub match_pat: Vec<String>,
     pub emit_ast: bool,
     pub fail_on_unknown_type: bool,
+    pub ignore_functions: bool,
     pub override_enum_ty: Option<il::IKind>,
     pub clang_args: Vec<String>,
 }
@@ -595,6 +596,10 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
             ci.base_members += 1;
         }
         CXCursor_CXXMethod => {
+            if ctx.options.ignore_functions {
+                return CXChildVisit_Continue;
+            }
+
             let linkage = cursor.linkage();
             if linkage != CXLinkage_External {
                 return CXChildVisit_Continue;
