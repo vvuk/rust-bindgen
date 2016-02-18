@@ -18,11 +18,11 @@ struct StdLogger;
 
 impl Logger for StdLogger {
     fn error(&self, msg: &str) {
-        error!("{}", msg);
+        println!("{}", msg);
     }
 
     fn warn(&self, msg: &str) {
-        warn!("{}", msg);
+        println!("{}", msg);
     }
 }
 
