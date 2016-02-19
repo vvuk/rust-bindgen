@@ -1153,10 +1153,18 @@ fn cenum_to_rs(ctx: &mut GenCtx, name: String, comment: String, items: Vec<EnumI
     }
 
     let variants = items.iter().map(|it| {
-        let value_sign = ast::UnsuffixedIntLit(if it.val < 0 { ast::Minus } else { ast::Plus });
-        let value_node =
-            ast::ExprLit(P(respan(ctx.span, ast::LitInt(it.val.abs() as u64,
-                                                        value_sign))));
+        // FIXME(bholley): The overall handling of enum signs is kinda sloppy - we
+        // store them as an i64 even if the enum type is unsigned, which means that
+        // we end up generating literals the high bit of the bitfield is set. This
+        // works out to the same bitfield with two's complement, but we can't negate
+        // i64::min_value(), so we need to handle it separately.
+        let value_node = if it.val == i64::min_value() {
+            let value_sign = ast::UnsuffixedIntLit(ast::Plus);
+            ast::ExprLit(P(respan(ctx.span, ast::LitInt(it.val as u64, value_sign ))))
+        } else {
+            let value_sign = ast::UnsuffixedIntLit(if it.val < 0 { ast::Minus } else { ast::Plus });
+            ast::ExprLit(P(respan(ctx.span, ast::LitInt(it.val.abs() as u64, value_sign))))
+        };
 
         let variant = respan(ctx.span, ast::Variant_ {
             name: ctx.ext_cx.ident_of(&it.name),
