@@ -974,6 +974,8 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
     attrs.push(mk_repr_attr(ctx, layout));
     if !has_destructor {
         attrs.push(mk_deriving_copy_attr(ctx));
+    } else {
+        attrs.push(mk_unsafe_no_drop_flag_attr(ctx));
     }
     let struct_def = P(ast::Item { ident: ctx.ext_cx.ident_of(&id),
         attrs: attrs,
@@ -1419,6 +1421,19 @@ fn mk_deriving_copy_attr(ctx: &mut GenCtx) -> ast::Attribute {
         InternedString::new("derive"),
         vec!(P(respan(ctx.span, ast::MetaWord(InternedString::new("Copy")))),
              P(respan(ctx.span, ast::MetaWord(InternedString::new("Clone")))))
+    )));
+
+    respan(ctx.span, ast::Attribute_ {
+        id: mk_attr_id(),
+        style: ast::AttrStyle::Outer,
+        value: attr_val,
+        is_sugared_doc: false
+    })
+}
+
+fn mk_unsafe_no_drop_flag_attr(ctx: &mut GenCtx) -> ast::Attribute {
+    let attr_val = P(respan(ctx.span, ast::MetaWord(
+        InternedString::new("unsafe_no_drop_flag")
     )));
 
     respan(ctx.span, ast::Attribute_ {
