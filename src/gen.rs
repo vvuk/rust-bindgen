@@ -25,7 +25,6 @@ use types::*;
 
 struct GenCtx<'r> {
     ext_cx: base::ExtCtxt<'r>,
-    unnamed_ty: usize,
     span: Span
 }
 
@@ -82,16 +81,7 @@ fn rust_type_id(ctx: &mut GenCtx, name: String) -> String {
     }
 }
 
-fn unnamed_name(ctx: &mut GenCtx, name: String, filename: String) -> String {
-    return if name.is_empty() {
-        ctx.unnamed_ty += 1;
-        format!("{}_unnamed_{}", filename, ctx.unnamed_ty)
-    } else {
-        name
-    }
-}
-
-fn comp_name(kind: CompKind, name: &str) -> String {
+fn comp_name(kind: CompKind, name: &String) -> String {
     match kind {
         CompKind::Struct => struct_name(name),
         CompKind::Union  => union_name(name),
@@ -251,7 +241,6 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
     let mut feature_gated_cfgs = vec![];
     let mut ctx = GenCtx {
         ext_cx: base::ExtCtxt::new(sess, Vec::new(), cfg, &mut feature_gated_cfgs),
-        unnamed_ty: 0,
         span: span
     };
     ctx.ext_cx.bt_push(ExpnInfo {
@@ -301,35 +290,19 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
                 defs.extend(ctypedef_to_rs(&mut ctx, t.name.clone(), t.comment.clone(), &t.ty).into_iter())
             },
             GCompDecl(ci) => {
-                {
-                    let mut c = ci.borrow_mut();
-                    c.name = unnamed_name(&mut ctx, c.name.clone(), c.filename.clone());
-                }
                 let c = ci.borrow().clone();
                 defs.push(opaque_to_rs(&mut ctx, comp_name(c.kind, &c.name)));
             },
             GComp(ci) => {
-                {
-                    let mut c = ci.borrow_mut();
-                    c.name = unnamed_name(&mut ctx, c.name.clone(), c.filename.clone());
-                }
                 let c = ci.borrow().clone();
                 defs.extend(comp_to_rs(&mut ctx, comp_name(c.kind, &c.name),
                                        c).into_iter())
             },
             GEnumDecl(ei) => {
-                {
-                    let mut e = ei.borrow_mut();
-                    e.name = unnamed_name(&mut ctx, e.name.clone(), e.filename.clone());
-                }
                 let e = ei.borrow().clone();
                 defs.push(opaque_to_rs(&mut ctx, enum_name(&e.name)));
             },
             GEnum(ei) => {
-                {
-                    let mut e = ei.borrow_mut();
-                    e.name = unnamed_name(&mut ctx, e.name.clone(), e.filename.clone());
-                }
                 let e = ei.borrow().clone();
                 defs.extend(cenum_to_rs(&mut ctx, enum_name(&e.name), e.comment, e.items, e.layout).into_iter())
             },
@@ -660,24 +633,12 @@ fn ctypedef_to_rs(ctx: &mut GenCtx, name: String, comment: String, ty: &Type) ->
 
     match *ty {
         TComp(ref ci) => {
-            let is_empty = ci.borrow().name.is_empty();
-            if is_empty {
-                ci.borrow_mut().name = name.clone();
-                let c = ci.borrow().clone();
-                comp_to_rs(ctx, name, c)
-            } else {
-                vec!(mk_item(ctx, name, comment, ty))
-            }
+            assert!(!ci.borrow().name.is_empty());
+            vec!(mk_item(ctx, name, comment, ty))
         },
         TEnum(ref ei) => {
-            let is_empty = ei.borrow().name.is_empty();
-            if is_empty {
-                ei.borrow_mut().name = name.clone();
-                let e = ei.borrow().clone();
-                cenum_to_rs(ctx, name, e.comment, e.items, e.layout)
-            } else {
-                vec!(mk_item(ctx, name, comment, ty))
-            }
+            assert!(!ei.borrow().name.is_empty());
+            vec!(mk_item(ctx, name, comment, ty))
         },
         _ => vec!(mk_item(ctx, name, comment, ty))
     }
@@ -1637,8 +1598,7 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
             mk_ty(ctx, false, vec!(id))
         },
         TComp(ref ci) => {
-            let mut c = ci.borrow_mut();
-            c.name = unnamed_name(ctx, c.name.clone(), c.filename.clone());
+            let mut c = ci.borrow();
             let args = c.args.iter().map(|gt| {
                 P(cty_to_rs(ctx, gt, allow_bool))
             }).collect();
@@ -1647,6 +1607,8 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
         TEnum(ref ei) => {
             let mut e = ei.borrow_mut();
             e.name = unnamed_name(ctx, e.name.clone(), e.filename.clone());
+        TEnum(ref ei) => {
+            let mut e = ei.borrow();
             mk_ty(ctx, false, vec!(enum_name(&e.name)))
         }
     }

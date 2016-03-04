@@ -230,11 +230,22 @@ pub struct CompInfo {
     pub layout: Layout,
 }
 
+static mut UNNAMED_COUNTER: u32 = 0;
+
+fn unnamed_name(name: String, filename: &String) -> String {
+    return if name.is_empty() {
+        let n = unsafe { UNNAMED_COUNTER += 1; UNNAMED_COUNTER };
+        format!("{}_unnamed_{}", filename, n)
+    } else {
+        name
+    };
+}
+
 impl CompInfo {
     pub fn new(name: String, filename: String, comment: String, kind: CompKind, members: Vec<CompMember>, layout: Layout) -> CompInfo {
         CompInfo {
             kind: kind,
-            name: name,
+            name: unnamed_name(name, &filename),
             filename: filename,
             comment: comment,
             members: members,
@@ -289,7 +300,7 @@ pub struct EnumInfo {
 impl EnumInfo {
     pub fn new(name: String, filename: String, kind: IKind, items: Vec<EnumItem>, layout: Layout) -> EnumInfo {
         EnumInfo {
-            name: name,
+            name: unnamed_name(name, &filename),
             comment: String::new(),
             filename: filename,
             items: items,
