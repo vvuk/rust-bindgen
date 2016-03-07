@@ -37,6 +37,12 @@ impl Cursor {
         mangling
     }
 
+    pub fn semantic_parent(&self) -> Cursor {
+        unsafe {
+            Cursor { x: clang_getCursorSemanticParent(self.x) }
+        }
+    }
+
     pub fn kind(&self) -> Enum_CXCursorKind {
         unsafe {
             clang_getCursorKind(self.x)
