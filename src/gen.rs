@@ -759,7 +759,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
                     ast::Public,
                 ),
                 id: ast::DUMMY_NODE_ID,
-                ty: quote_ty!(&ctx.ext_cx, PhantomData<$inner_type>),
+                ty: quote_ty!(&ctx.ext_cx, ::std::marker::PhantomData<$inner_type>),
                 attrs: vec!(),
             }));
         }
