@@ -16,6 +16,7 @@ use clangll::*;
 
 use super::Logger;
 
+#[derive(Clone)]
 pub struct ClangParserOptions {
     pub builtin_names: HashSet<String>,
     pub builtins: bool,
@@ -33,7 +34,9 @@ struct ClangParserCtx<'a> {
     globals: Vec<Global>,
     builtin_defs: Vec<Cursor>,
     logger: &'a (Logger+'a),
-    err_count: i32
+    err_count: i32,
+    anonymous_namespaces_found: usize,
+    namespaces: HashMap<String, ClangParserCtx<'a>>,
 }
 
 fn match_pattern(ctx: &mut ClangParserCtx, cursor: &Cursor) -> bool {
@@ -740,7 +743,7 @@ fn visit_literal(cursor: &Cursor, unit: &TranslationUnit) -> Option<i64> {
 }
 
 fn visit_top(cursor: &Cursor,
-                 ctx: &mut ClangParserCtx,
+                 mut ctx: &mut ClangParserCtx,
                  unit: &TranslationUnit) -> Enum_CXVisitorResult {
     if !match_pattern(ctx, cursor) {
         return CXChildVisit_Continue;
@@ -858,7 +861,39 @@ fn visit_top(cursor: &Cursor,
             CXChildVisit_Continue
         }
         CXCursor_Namespace => {
-            return CXChildVisit_Recurse;
+            let namespace_name = match unit.tokens(cursor) {
+                None => None,
+                Some(tokens) => {
+                    if tokens.len() <= 1 {
+                        None
+                    } else {
+                        match &*tokens[1].spelling {
+                            "{" => None,
+                            s => Some(s.to_owned()),
+                        }
+                    }
+                }
+            }.unwrap_or_else(|| {
+                ctx.anonymous_namespaces_found += 1;
+                format!("__anonymous{}", ctx.anonymous_namespaces_found)
+            });
+
+            let mut ns_ctx = ctx.namespaces.entry(namespace_name).or_insert(
+                ClangParserCtx {
+                    options: ctx.options.clone(),
+                    name: HashMap::new(),
+                    builtin_defs: vec!(),
+                    globals: vec!(),
+                    logger: ctx.logger,
+                    err_count: 0,
+                    anonymous_namespaces_found: 0,
+                    namespaces: HashMap::new(),
+                }
+            );
+
+            cursor.visit(|cur, _: &Cursor| visit_top(cur, &mut ns_ctx, &unit));
+
+            return CXChildVisit_Continue;
         }
         CXCursor_MacroDefinition => {
             let val = parse_int_literal_tokens(cursor, unit, 1);
@@ -900,7 +935,9 @@ pub fn parse(options: ClangParserOptions, logger: &Logger) -> Result<Vec<Global>
         builtin_defs: vec!(),
         globals: vec!(),
         logger: logger,
-        err_count: 0
+        err_count: 0,
+        anonymous_namespaces_found: 0,
+        namespaces: HashMap::new(),
     };
 
     let ix = cx::Index::create(false, true);
@@ -944,6 +981,11 @@ pub fn parse(options: ClangParserOptions, logger: &Logger) -> Result<Vec<Global>
 
     if ctx.err_count > 0 {
         return Err(())
+    }
+
+    // XXX: Return namespaces or some sort of tree structure instead of a Vec
+    for ns in ctx.namespaces.values() {
+        ctx.globals.extend(ns.globals.clone());
     }
 
     Ok(ctx.globals)
