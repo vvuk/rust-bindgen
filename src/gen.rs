@@ -2,8 +2,6 @@ use std::cell::RefCell;
 use std::vec::Vec;
 use std::rc::Rc;
 use std::collections::HashMap;
-use std::collections::hash_map::Entry;
-
 use syntax::abi;
 use syntax::ast;
 use syntax::codemap::{Span, Spanned, respan, ExpnInfo, NameAndSpan, MacroBang};
@@ -28,7 +26,7 @@ struct GenCtx<'r> {
 }
 
 fn first<A, B>((val, _): (A, B)) -> A {
-    return val;
+    val
 }
 
 fn ref_eq<'a, 'b, T>(thing: &'a T, other: &'b T) -> bool {
@@ -226,7 +224,7 @@ fn gen_unmangle_method(ctx: &mut GenCtx,
     P(item)
 }
 
-pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> Vec<P<ast::Item>> {
+pub fn gen_mods(links: &[(String, LinkType)], mut root_module: Module, span: Span) -> Vec<P<ast::Item>> {
     // Create a dummy ExtCtxt. We only need this for string interning and that uses TLS.
     let mut features = Features::new();
     features.allow_quote = true;
@@ -250,6 +248,47 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
             span: None
         }
     });
+
+    gen_mod(&mut ctx, &mut root_module, links, span).items
+}
+
+fn gen_mod(mut ctx: &mut GenCtx,
+           mut module: &mut Module,
+           links: &[(String, LinkType)],
+           span: Span) -> ast::Mod {
+
+    let mut globals = gen_globals(&mut ctx, links, module.globals());
+    globals.extend(module.submodules().drain().filter_map(|(name, mut module)| {
+        let module = gen_mod(ctx, &mut module, links, span.clone());
+
+        // mod foo; represents a module in another file, not an empty module,
+        // so...
+        if !module.items.is_empty() {
+            Some(P(ast::Item {
+                ident: ctx.ext_cx.ident_of(&name),
+                attrs: vec![],
+                id: ast::DUMMY_NODE_ID,
+                node: ast::ItemMod(module),
+                vis: ast::Public,
+                span: span.clone(),
+            }))
+        } else {
+            None
+        }
+    }));
+
+
+    ast::Mod {
+        inner: span,
+        items: globals,
+    }
+}
+
+
+
+fn gen_globals(mut ctx: &mut GenCtx,
+               links: &[(String, LinkType)],
+               globs: &[Global]) -> Vec<P<ast::Item>> {
     let uniq_globs = tag_dup_decl(globs);
 
     let mut fs = vec!();
@@ -314,7 +353,7 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
         }
     }
 
-    let vars = vs.into_iter().map(|v| {
+    let vars: Vec<_> = vs.into_iter().map(|v| {
         match v {
             GVar(vi) => {
                 let v = vi.borrow();
@@ -358,19 +397,12 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
 
         let mut map: HashMap<abi::Abi, Vec<_>> = HashMap::new();
         for (abi, func) in func_list {
-            match map.entry(abi) {
-                Entry::Occupied(mut occ) => {
-                    occ.get_mut().push(func);
-                }
-                Entry::Vacant(vac) => {
-                    vac.insert(vec!(func));
-                }
-            }
+            map.entry(abi).or_insert(vec![]).push(func);
         }
         map
     };
 
-    if !Vec::is_empty(&vars) {
+    if !vars.is_empty() {
         defs.push(mk_extern(&mut ctx, links, vars, abi::C));
     }
 
@@ -386,37 +418,33 @@ pub fn gen_mod(links: &[(String, LinkType)], globs: Vec<Global>, span: Span) -> 
 fn mk_extern(ctx: &mut GenCtx, links: &[(String, LinkType)],
              foreign_items: Vec<P<ast::ForeignItem>>,
              abi: abi::Abi) -> P<ast::Item> {
-    let attrs = if links.is_empty() {
-        Vec::new()
-    } else {
-        links.iter().map(|&(ref l, ref k)| {
-            let k = match k {
-                &LinkType::Default => None,
-                &LinkType::Static => Some("static"),
-                &LinkType::Framework => Some("framework")
-            };
-            let link_name = P(respan(ctx.span, ast::MetaNameValue(
-                InternedString::new("name"),
-                respan(ctx.span, ast::LitStr(intern(l).as_str(), ast::CookedStr))
-            )));
-            let link_args = match k {
-                None => vec!(link_name),
-                Some(ref k) => vec!(link_name, P(respan(ctx.span, ast::MetaNameValue(
-                    InternedString::new("kind"),
-                    respan(ctx.span, ast::LitStr(intern(k).as_str(), ast::CookedStr))
-                ))))
-            };
-            respan(ctx.span, ast::Attribute_ {
-                id: mk_attr_id(),
-                style: ast::AttrStyle::Outer,
-                value: P(respan(ctx.span, ast::MetaList(
-                    InternedString::new("link"),
-                    link_args)
-                )),
-                is_sugared_doc: false
-            })
-        }).collect()
-    };
+    let attrs: Vec<_> = links.iter().map(|&(ref l, ref k)| {
+        let k = match k {
+            &LinkType::Default => None,
+            &LinkType::Static => Some("static"),
+            &LinkType::Framework => Some("framework")
+        };
+        let link_name = P(respan(ctx.span, ast::MetaNameValue(
+            InternedString::new("name"),
+            respan(ctx.span, ast::LitStr(intern(l).as_str(), ast::CookedStr))
+        )));
+        let link_args = match k {
+            None => vec!(link_name),
+            Some(ref k) => vec!(link_name, P(respan(ctx.span, ast::MetaNameValue(
+                InternedString::new("kind"),
+                respan(ctx.span, ast::LitStr(intern(k).as_str(), ast::CookedStr))
+            ))))
+        };
+        respan(ctx.span, ast::Attribute_ {
+            id: mk_attr_id(),
+            style: ast::AttrStyle::Outer,
+            value: P(respan(ctx.span, ast::MetaList(
+                InternedString::new("link"),
+                link_args)
+            )),
+            is_sugared_doc: false
+        })
+    }).collect();
 
     let mut items = Vec::new();
     items.extend(foreign_items.into_iter());
@@ -488,7 +516,7 @@ fn remove_redundant_decl(gs: Vec<Global>) -> Vec<Global> {
     ).collect();
 }
 
-fn tag_dup_decl(gs: Vec<Global>) -> Vec<Global> {
+fn tag_dup_decl(gs: &[Global]) -> Vec<Global> {
     fn check(name1: &str, name2: &str) -> bool {
         !name1.is_empty() && name1 == name2
     }
@@ -553,7 +581,7 @@ fn tag_dup_decl(gs: Vec<Global>) -> Vec<Global> {
     }
 
     if gs.is_empty() {
-        return gs;
+        return vec![];
     }
 
     let len = gs.len();
@@ -1590,14 +1618,14 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
             mk_ty(ctx, false, vec!(id))
         },
         &TComp(ref ci) => {
-            let mut c = ci.borrow();
+            let c = ci.borrow();
             let args = c.args.iter().map(|gt| {
                 P(cty_to_rs(ctx, gt, allow_bool))
             }).collect();
             mk_ty_args(ctx, false, vec!(comp_name(c.kind, &c.name)), args)
         },
         &TEnum(ref ei) => {
-            let mut e = ei.borrow();
+            let e = ei.borrow();
             mk_ty(ctx, false, vec!(enum_name(&e.name)))
         }
     };
@@ -1632,11 +1660,7 @@ fn cty_has_destructor(ty: &Type) -> bool {
             }) {
                 return true;
             }
-            if let Some(ref ty) = c.ref_template {
-                true
-            } else {
-                false
-            }
+            c.ref_template.is_some()
         },
         &TNamed(ref ti) => {
             cty_has_destructor(&ti.borrow().ty)
@@ -1668,11 +1692,11 @@ fn mk_ty_args(ctx: &GenCtx, global: bool, segments: Vec<String>, args: Vec<P<ast
         },
     );
 
-    return ast::Ty {
+    ast::Ty {
         id: ast::DUMMY_NODE_ID,
         node: ty,
         span: ctx.span
-    };
+    }
 }
 
 fn mk_ptrty(ctx: &mut GenCtx, base: &ast::Ty, is_const: bool) -> ast::Ty {

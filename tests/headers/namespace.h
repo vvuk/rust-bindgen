@@ -1,11 +1,20 @@
 
 
-namespace {
-    void foo();
-    namespace wut {
-    }
-}
+void top_level();
 
 namespace whatever {
-    void foo();
+    typedef int whatever_int_t;
+
+    void in_whatever();
 }
+
+namespace {
+    namespace empty {}
+
+    void foo();
+
+    class A {
+        whatever::whatever_int_t b;
+    };
+}
+
