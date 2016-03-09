@@ -920,9 +920,9 @@ fn visit_top(cursor: &Cursor,
 fn log_err_warn(ctx: &mut ClangParserCtx, msg: &str, is_err: bool) {
     if is_err {
         ctx.err_count += 1;
-        ctx.logger.error(msg)
+        ctx.logger.error(msg);
     } else {
-        ctx.logger.warn(msg)
+        ctx.logger.warn(msg);
     }
 }
 

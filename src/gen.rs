@@ -459,7 +459,7 @@ fn mk_extern(ctx: &mut GenCtx, links: &[(String, LinkType)],
         attrs: attrs,
         id: ast::DUMMY_NODE_ID,
         node: ext,
-        vis: ast::Visibility::Inherited,
+        vis: ast::Inherited,
         span: ctx.span
     })
 }
@@ -649,14 +649,14 @@ fn ctypedef_to_rs(ctx: &mut GenCtx, name: String, comment: String, ty: &Type) ->
             empty_generics()
         );
 
-        return P(ast::Item {
-                  ident: ctx.ext_cx.ident_of(&rust_name),
-                  attrs: mk_doc_attr(ctx, comment),
-                  id: ast::DUMMY_NODE_ID,
-                  node: base,
-                  vis: ast::Public,
-                  span: ctx.span
-               });
+        P(ast::Item {
+            ident: ctx.ext_cx.ident_of(&rust_name),
+            attrs: mk_doc_attr(ctx, comment),
+            id: ast::DUMMY_NODE_ID,
+            node: base,
+            vis: ast::Public,
+            span: ctx.span
+        })
     }
 
     match *ty {
@@ -695,12 +695,12 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
     let mut bitfields: u32 = 0;
 
     if ci.hide ||
-       args.iter().any(|f| match *f { TVoid => true, _ => false }) {
+       args.iter().any(|f| f == &TVoid) {
         return vec!();
     }
 
     let id = rust_type_id(ctx, name.clone());
-    let id_ty = P(mk_ty(ctx, false, vec!(id.clone())));
+    let id_ty = P(mk_ty(ctx, false, &[id.clone()]));
 
     if ci.has_vtable {
         let mut vffields = vec!();
@@ -728,7 +728,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
             let field = ast::StructField_ {
                 kind: ast::NamedField(ctx.ext_cx.ident_of("_base"), ast::Public),
                 id: ast::DUMMY_NODE_ID,
-                ty: P(mk_ty_args(ctx, false, vec!(base.clone()), vec!())),
+                ty: P(mk_ty(ctx, false, &[base.clone()])),
                 attrs: vec!(),
             };
             vffields.push(respan(ctx.span, field));
@@ -765,8 +765,8 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
         };
         extra.push(P(item));
 
-        if base_vftable == None {
-            let vf_type = mk_ty_args(ctx, false, vec!(vf_name), vec!());
+        if base_vftable.is_none() {
+            let vf_type = mk_ty(ctx, false, &[vf_name]);
             fields.push(respan(ctx.span, ast::StructField_ {
                 kind: ast::NamedField(ctx.ext_cx.ident_of("_vftable"), ast::Public),
                 id: ast::DUMMY_NODE_ID,
@@ -1270,7 +1270,7 @@ fn type_for_bitfield_width(ctx: &mut GenCtx, width: u32) -> ast::Ty {
     } else {
         "bool"
     };
-    mk_ty(ctx, false, vec!(input_type.to_string()))
+    mk_ty(ctx, false, &[input_type.to_owned()])
 }
 
 fn gen_bitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
@@ -1386,7 +1386,8 @@ fn mk_blob_field(ctx: &GenCtx, name: &str, layout: Layout) -> Spanned<ast::Struc
         _ => "u8",
     };
     let data_len = if ty_name == "u8" { layout.size } else { layout.size / layout.align };
-    let base_ty = mk_ty(ctx, false, vec!(ty_name.to_string()));
+
+    let base_ty = mk_ty(ctx, false, &[ty_name.to_owned()]);
     let data_ty = if data_len == 1 {
         P(base_ty)
     } else {
@@ -1584,8 +1585,8 @@ fn cfunc_to_rs(ctx: &mut GenCtx,
 }
 
 fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
-    return match ty {
-        &TVoid => mk_ty(ctx, true, vec!("libc".to_string(), "c_void".to_string())),
+    match ty {
+        &TVoid => mk_ty(ctx, true, &["libc".to_owned(), "c_void".to_owned()]),
         &TInt(i, ref layout) => match i {
             IBool => {
                 let ty_name = match layout.size {
@@ -1595,22 +1596,22 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
                     8 => "u64",
                     _ => "u8",
                 };
-                mk_ty(ctx, false, vec!(ty_name.to_owned()))
+                mk_ty(ctx, false, &[ty_name.to_owned()])
             },
-            ISChar => mk_ty(ctx, true, vec!("libc".to_string(), "c_char".to_string())),
+            ISChar => mk_ty(ctx, true, &["libc".to_owned(), "c_char".to_owned()]),
             IInt |
             IShort |
-            ILongLong => mk_ty(ctx, false, vec!(format!("i{}", layout.size * 8))),
+            ILongLong => mk_ty(ctx, false, &[format!("i{}", layout.size * 8)]),
             IUChar |
             IUInt |
             IUShort |
-            IULongLong => mk_ty(ctx, false, vec!(format!("u{}", layout.size * 8))),
-            ILong => mk_ty(ctx, true, vec!("libc".to_string(), "c_long".to_string())),
-            IULong => mk_ty(ctx, true, vec!("libc".to_string(), "c_ulong".to_string())),
+            IULongLong => mk_ty(ctx, false, &[format!("u{}", layout.size * 8)]),
+            ILong => mk_ty(ctx, true, &["libc".to_owned(), "c_long".to_owned()]),
+            IULong => mk_ty(ctx, true, &["libc".to_owned(), "c_ulong".to_owned()]),
         },
         &TFloat(f, _) => match f {
-            FFloat => mk_ty(ctx, false, vec!("f32".to_string())),
-            FDouble => mk_ty(ctx, false, vec!("f64".to_string()))
+            FFloat => mk_ty(ctx, false, &["f32".to_owned()]),
+            FDouble => mk_ty(ctx, false, &["f64".to_owned()])
         },
         &TPtr(ref t, is_const, _is_ref, _) => {
             let id = cty_to_rs(ctx, &**t, allow_bool);
@@ -1638,18 +1639,18 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
         },
         TNamed(ref ti) => {
             let id = rust_type_id(ctx, ti.borrow().name.clone());
-            mk_ty(ctx, false, vec!(id))
+            mk_ty(ctx, false, &[id])
         },
         TComp(ref ci) => {
             let c = ci.borrow();
             let args = c.args.iter().map(|gt| {
                 P(cty_to_rs(ctx, gt, allow_bool))
             }).collect();
-            mk_ty_args(ctx, false, vec!(comp_name(c.kind, &c.name)), args)
+            mk_ty_args(ctx, false, &[comp_name(c.kind, &c.name)], args)
         },
         TEnum(ref ei) => {
             let e = ei.borrow();
-            mk_ty(ctx, false, vec!(enum_name(&e.name)))
+            mk_ty(ctx, false, &[enum_name(&e.name)])
         }
     }
 }
@@ -1692,11 +1693,11 @@ fn cty_has_destructor(ty: &Type) -> bool {
     }
 }
 
-fn mk_ty(ctx: &GenCtx, global: bool, segments: Vec<String>) -> ast::Ty {
+fn mk_ty(ctx: &GenCtx, global: bool, segments: &[String]) -> ast::Ty {
     mk_ty_args(ctx, global, segments, vec!())
 }
 
-fn mk_ty_args(ctx: &GenCtx, global: bool, segments: Vec<String>, args: Vec<P<ast::Ty>>) -> ast::Ty {
+fn mk_ty_args(ctx: &GenCtx, global: bool, segments: &[String], args: Vec<P<ast::Ty>>) -> ast::Ty {
     let ty = ast::TyPath(
         None,
         ast::Path {
