@@ -56,25 +56,16 @@ fn rust_id(ctx: &mut GenCtx, name: String) -> (String, bool) {
 }
 
 fn rust_type_id(ctx: &mut GenCtx, name: String) -> String {
-    if "bool" == name ||
-        "uint" == name ||
-        "u8" == name ||
-        "u16" == name ||
-        "u32" == name ||
-        "f32" == name ||
-        "f64" == name ||
-        "i8" == name ||
-        "i16" == name ||
-        "i32" == name ||
-        "i64" == name ||
-        "Self" == name ||
-        "str" == name {
-        let mut s = "_".to_string();
-        s.push_str(&name);
-        s
-    } else {
-        let (n, _) = rust_id(ctx, name);
-        n
+    match &*name {
+        "bool" | "uint" | "u8" | "u16" |
+        "u32" | "f32" | "f64" | "i8" |
+        "i16" | "i32" | "i64" | "Self" |
+        "str" => {
+            let mut s = "_".to_string();
+            s.push_str(&name);
+            s
+        }
+        _ => first(rust_id(ctx, name))
     }
 }
 
@@ -134,7 +125,7 @@ fn gen_unmangle_method(ctx: &mut GenCtx,
                     unnamed += 1;
                     format!("arg{}", unnamed)
                 } else {
-                    rust_id(ctx, n.clone()).0
+                    first(rust_id(ctx, n.clone()))
                 };
                 let expr = ast::Expr {
                     id: ast::DUMMY_NODE_ID,
@@ -1179,7 +1170,7 @@ fn gen_comp_methods(ctx: &mut GenCtx, data_field: &str, data_offset: usize,
         // TODO: Implement bitfield accessors
         if f.bitfields.is_some() { return None; }
 
-        let (f_name, _) = rust_id(ctx, f.name.clone());
+        let f_name = first(rust_id(ctx, f.name.clone()));
         let ret_ty = P(cty_to_rs(ctx, &TPtr(Box::new(f.ty.clone()), false, false, Layout::zero()), true));
 
         // When the offset is zero, generate slightly prettier code.
