@@ -112,6 +112,7 @@ pub struct BindgenOptions {
     pub emit_ast: bool,
     pub ignore_functions: bool,
     pub fail_on_unknown_type: bool,
+    pub enable_cxx_namespaces: bool,
     pub override_enum_ty: String,
     pub clang_args: Vec<String>,
     pub derive_debug: bool,
@@ -127,6 +128,7 @@ impl Default for BindgenOptions {
             emit_ast: false,
             ignore_functions: false,
             fail_on_unknown_type: true,
+            enable_cxx_namespaces: false,
             override_enum_ty: "".to_string(),
             clang_args: Vec::new()
         }
@@ -230,6 +232,7 @@ fn parse_headers(options: &BindgenOptions, logger: &Logger) -> Result<Module, ()
         emit_ast: options.emit_ast,
         ignore_functions: options.ignore_functions,
         fail_on_unknown_type: options.fail_on_unknown_type,
+        enable_cxx_namespaces: options.enable_cxx_namespaces,
         override_enum_ty: str_to_ikind(&options.override_enum_ty),
         clang_args: options.clang_args.clone(),
     };

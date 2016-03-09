@@ -25,6 +25,7 @@ pub struct ClangParserOptions {
     pub emit_ast: bool,
     pub fail_on_unknown_type: bool,
     pub ignore_functions: bool,
+    pub enable_cxx_namespaces: bool,
     pub override_enum_ty: Option<il::IKind>,
     pub clang_args: Vec<String>,
 }
@@ -52,15 +53,7 @@ fn match_pattern(ctx: &mut ClangParserCtx, cursor: &Cursor) -> bool {
     }
 
     let name = file.name();
-    let mut found = false;
-    ctx.options.match_pat.iter().all(|pat| {
-        if (&name).contains(pat) {
-            found = true;
-        }
-        true
-    });
-
-    found
+    ctx.options.match_pat.iter().any(|pat| name.contains(pat))
 }
 
 fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
@@ -862,6 +855,10 @@ fn visit_top(cursor: &Cursor,
             CXChildVisit_Continue
         }
         CXCursor_Namespace => {
+            if !ctx.options.enable_cxx_namespaces {
+                return CXChildVisit_Recurse;
+            }
+
             let namespace_name = match unit.tokens(cursor) {
                 None => None,
                 Some(tokens) => {
