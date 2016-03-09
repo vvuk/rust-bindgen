@@ -114,6 +114,10 @@ fn parse_args(args: &[String]) -> ParseResult {
                     options.override_enum_ty = args[ix + 1].clone();
                     ix += 2;
                 }
+                "-enable-cxx-namespaces" => {
+                    options.enable_cxx_namespaces = true;
+                    ix += 1;
+                }
                 _ => {
                     options.clang_args.push(args[ix].clone());
                     ix += 1;
