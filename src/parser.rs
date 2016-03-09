@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::path::Path;
+use std::mem;
 
 use syntax::abi;
 
@@ -928,7 +929,7 @@ fn log_err_warn(ctx: &mut ClangParserCtx, msg: &str, is_err: bool) {
     }
 }
 
-pub fn parse(options: ClangParserOptions, logger: &Logger) -> Result<Vec<Global>, ()> {
+pub fn parse(options: ClangParserOptions, logger: &Logger) -> Result<Module, ()> {
     let mut ctx = ClangParserCtx {
         options: options,
         name: HashMap::new(),
@@ -983,10 +984,19 @@ pub fn parse(options: ClangParserOptions, logger: &Logger) -> Result<Vec<Global>
         return Err(())
     }
 
-    // XXX: Return namespaces or some sort of tree structure instead of a Vec
-    for ns in ctx.namespaces.values() {
-        ctx.globals.extend(ns.globals.clone());
+    let mut root = Module::new();
+
+    fn add_submodules<'a>(module: &mut Module,
+                          mut ctx: ClangParserCtx<'a>) {
+        mem::replace(module.globals(), ctx.globals);
+        for (name, ns) in ctx.namespaces.drain() {
+            let mut new = Module::new();
+            add_submodules(&mut new, ns);
+            module.add_submodule(name, new);
+        }
     }
 
-    Ok(ctx.globals)
+    add_submodules(&mut root, ctx);
+
+    Ok(root)
 }

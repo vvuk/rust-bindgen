@@ -20,7 +20,7 @@ use syntax::print::pprust;
 use syntax::print::pp::eof;
 use syntax::ptr::P;
 
-use types::Global;
+use types::Module;
 
 mod types;
 mod clangll;
@@ -154,21 +154,15 @@ impl Bindings {
     /// Deprecated - use a `Builder` instead
     pub fn generate(options: &BindgenOptions, logger: Option<&Logger>, span: Option<Span>) -> Result<Bindings, ()> {
         let l = DummyLogger;
-        let logger = match logger {
-            Some(l) => l,
-            None => &l as &Logger
-        };
+        let logger = logger.unwrap_or(&l as &Logger);
 
-        let span = match span {
-            Some(s) => s,
-            None => DUMMY_SP
-        };
+        let span = span.unwrap_or(DUMMY_SP);
 
-        let globals = try!(parse_headers(options, logger));
+        let root_module = try!(parse_headers(options, logger));
 
         let module = ast::Mod {
             inner: span,
-            items: gen::gen_mod(options, globals, span)
+            items: gen::gen_mods(&options.links[..], root_module, span)
         };
 
         Ok(Bindings {
@@ -212,7 +206,7 @@ impl Logger for DummyLogger {
     fn warn(&self, _msg: &str) { }
 }
 
-fn parse_headers(options: &BindgenOptions, logger: &Logger) -> Result<Vec<Global>, ()> {
+fn parse_headers(options: &BindgenOptions, logger: &Logger) -> Result<Module, ()> {
     fn str_to_ikind(s: &str) -> Option<types::IKind> {
         match s {
             "uchar"     => Some(types::IUChar),

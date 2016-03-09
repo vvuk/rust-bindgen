@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
+use std::collections::HashMap;
 
 use syntax::abi;
 
@@ -8,6 +9,43 @@ pub use self::Global::*;
 pub use self::Type::*;
 pub use self::IKind::*;
 pub use self::FKind::*;
+
+#[derive(Clone)]
+pub struct Module {
+    globals: Vec<Global>,
+    submodules: HashMap<String, Module>,
+}
+
+impl Module {
+    pub fn new() -> Self {
+        Self::with_globals(vec![])
+    }
+
+    pub fn with_globals(globals: Vec<Global>) -> Self {
+        Module {
+            globals: globals,
+            submodules: HashMap::new(),
+        }
+    }
+
+    pub fn globals(&mut self) -> &mut Vec<Global> {
+        &mut self.globals
+    }
+
+    pub fn submodules(&mut self) -> &mut HashMap<String, Module> {
+        &mut self.submodules
+    }
+
+    pub fn add_submodule(&mut self, name: String, module: Module) {
+        debug_assert!(!self.submodules.contains_key(&name));
+        self.submodules.insert(name, module);
+    }
+
+    #[allow(dead_code)]
+    pub fn add_global(&mut self, g: Global) {
+        self.globals.push(g)
+    }
+}
 
 #[derive(Clone)]
 pub enum Global {
