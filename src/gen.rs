@@ -1705,11 +1705,11 @@ fn mk_ptrty(ctx: &mut GenCtx, base: &ast::Ty, is_const: bool) -> ast::Ty {
         mutbl: if is_const { ast::MutImmutable } else { ast::MutMutable }
     });
 
-    return ast::Ty {
+    ast::Ty {
         id: ast::DUMMY_NODE_ID,
         node: ty,
         span: ctx.span
-    };
+    }
 }
 
 fn mk_refty(ctx: &mut GenCtx, base: &ast::Ty, is_const: bool) -> ast::Ty {
@@ -1721,11 +1721,11 @@ fn mk_refty(ctx: &mut GenCtx, base: &ast::Ty, is_const: bool) -> ast::Ty {
         }
     );
 
-    return ast::Ty {
+    ast::Ty {
         id: ast::DUMMY_NODE_ID,
         node: ty,
         span: ctx.span
-    };
+    }
 }
 
 fn mk_arrty(ctx: &GenCtx, base: &ast::Ty, n: usize) -> ast::Ty {
@@ -1741,11 +1741,11 @@ fn mk_arrty(ctx: &GenCtx, base: &ast::Ty, n: usize) -> ast::Ty {
         })
     );
 
-    return ast::Ty {
+    ast::Ty {
         id: ast::DUMMY_NODE_ID,
         node: ty,
         span: ctx.span
-    };
+    }
 }
 
 fn mk_fn_proto_ty(ctx: &mut GenCtx, decl: &ast::FnDecl, abi: abi::Abi) -> ast::Ty {
@@ -1804,7 +1804,7 @@ fn mk_fnty(ctx: &mut GenCtx, decl: &ast::FnDecl, abi: abi::Abi) -> ast::Ty {
         }
     ];
 
-    return ast::Ty {
+    ast::Ty {
         id: ast::DUMMY_NODE_ID,
         node: ast::TyPath(
             None,
@@ -1815,5 +1815,5 @@ fn mk_fnty(ctx: &mut GenCtx, decl: &ast::FnDecl, abi: abi::Abi) -> ast::Ty {
             },
         ),
         span: ctx.span
-    };
+    }
 }
