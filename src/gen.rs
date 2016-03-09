@@ -1744,11 +1744,11 @@ fn mk_refty(ctx: &mut GenCtx, base: &ast::Ty, is_const: bool) -> ast::Ty {
         }
     );
 
-    return ast::Ty {
+    ast::Ty {
         id: ast::DUMMY_NODE_ID,
         node: ty,
         span: ctx.span
-    };
+    }
 }
 
 fn mk_arrty(ctx: &GenCtx, base: &ast::Ty, n: usize) -> ast::Ty {
