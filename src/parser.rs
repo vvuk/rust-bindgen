@@ -271,7 +271,6 @@ fn mk_fn_sig(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Fu
 
 fn conv_decl_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Type {
     let ty_decl = &ty.declaration();
-    println!("Declaration kind: {} {}", ty_decl.spelling(), kind_to_str(ty_decl.kind()));
     return match ty_decl.kind() {
         CXCursor_StructDecl |
         CXCursor_UnionDecl |
@@ -331,8 +330,6 @@ fn conv_decl_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il:
 }
 
 fn conv_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Type {
-    println!("conv_ty: ty=`{}` sp=`{}` loc=`{}`", type_to_str(ty.kind()), cursor.spelling(), cursor.location());
-
     let layout = Layout::new(ty.size(), ty.align());
     return match ty.kind() {
         CXType_Void | CXType_Invalid => TVoid,
@@ -433,7 +430,6 @@ impl Annotations {
 fn visit_composite(cursor: &Cursor, parent: &Cursor,
                    ctx: &mut ClangParserCtx,
                    ci: &mut CompInfo) -> Enum_CXVisitorResult {
-    println!("visit_composite: {} {} {}", kind_to_str(cursor.kind()), cursor.spelling(), cursor.location());
 
     fn is_bitfield_continuation(field: &il::FieldInfo, ty: &il::Type, width: u32) -> bool {
         match (&field.bitfields, ty) {
@@ -754,7 +750,6 @@ fn visit_literal(cursor: &Cursor, unit: &TranslationUnit) -> Option<i64> {
 fn visit_top<'r>(cursor: &Cursor,
                  mut ctx: &mut ClangParserCtx,
                  unit: &TranslationUnit) -> Enum_CXVisitorResult {
-    println!("visit_top: {}", cursor.location());
     if !match_pattern(ctx, cursor) {
         return CXChildVisit_Continue;
     }
@@ -901,7 +896,6 @@ fn visit_top<'r>(cursor: &Cursor,
             let mod_id = match mod_id {
                 Some(id) => id,
                 None => {
-                    println!("Creating namespace {}", namespace_name);
                     let parent_id = ctx.current_module_id;
                     let id = ModuleId::next();
                     ctx.module_map.get_mut(&parent_id).unwrap().children_ids.push(id);

@@ -26,6 +26,23 @@ struct GenCtx<'r> {
     module_map: ModuleMap,
 }
 
+impl<'r> GenCtx<'r> {
+    fn full_path_for_module(&self, id: ModuleId) -> Vec<String> {
+        let mut ret = vec![];
+
+        let mut current_id = Some(id);
+        while let Some(current) = current_id {
+            let module = &self.module_map.get(&current).unwrap();
+            ret.push(module.name.clone());
+            current_id = module.parent_id;
+        }
+
+        ret.pop(); // The root isn't really here
+        ret.reverse();
+        ret
+    }
+}
+
 fn first<A, B>((val, _): (A, B)) -> A {
     val
 }
@@ -70,7 +87,7 @@ fn rust_type_id(ctx: &mut GenCtx, name: &str) -> String {
     }
 }
 
-fn comp_name(kind: CompKind, name: &String) -> String {
+fn comp_name(kind: CompKind, name: &str) -> String {
     match kind {
         CompKind::Struct => struct_name(name),
         CompKind::Union  => union_name(name),
@@ -1615,7 +1632,10 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
         },
         &TNamed(ref ti) => {
             let id = rust_type_id(ctx, &ti.borrow().name);
-            mk_ty(ctx, false, &[id])
+
+            let mut path = ctx.full_path_for_module(ti.borrow().module_id);
+            path.push(id);
+            mk_ty(ctx, false, &path)
         },
         &TComp(ref ci) => {
             let c = ci.borrow();
