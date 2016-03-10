@@ -37,6 +37,39 @@ impl<'r> GenCtx<'r> {
             current_id = module.parent_id;
         }
 
+        // XXX This is done because we don't actually print the root module.
+        //
+        // We include a lot of top-level "use's" instead.
+        //
+        // It might be desirable something like:
+        //
+        // ```
+        // use __randomlygeneratednameforroot::*;
+        // mod __randomlygeneratednameforroot {
+        //   pub mod b {
+        //     pub type ty = i32;
+        //   }
+        //   pub mod a {
+        //     static C: __randomlygeneratednameforroot::b::ty;
+        //   }
+        // }
+        // ```
+        //
+        // Vs:
+        //
+        // ```
+        // pub mod b {
+        //   use a;
+        //   pub type ty = i32;
+        // }
+        //
+        // pub mod a {
+        //   use b;
+        //   static C: b::ty;
+        // }
+        // ```
+        //
+        // Or even switching via flag back and forth.
         ret.pop(); // The root isn't really here
         ret.reverse();
         ret
