@@ -129,7 +129,23 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                         list
                     }
                 };
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, ctx.current_module_id, filename, comment, CompKind::Struct, vec!(), layout)));
+
+                let module_id = if args.is_empty() {
+                    ctx.current_module_id
+                } else {
+                    // it's an instantiation of another template,
+                    // find the canonical declaration to find the module it belongs to.
+                    let parent = cursor.specialized();
+                    ctx.name.get(&parent).and_then(|global| {
+                        if let GCompDecl(ref ci) = *global {
+                            Some(ci.borrow().module_id)
+                        } else {
+                            None
+                        }
+                    }).expect("Template class wasn't declared when parsing specialisation!")
+                };
+
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, module_id, filename, comment, CompKind::Struct, vec!(), layout)));
                 ci.borrow_mut().args = args;
                 GCompDecl(ci)
             }

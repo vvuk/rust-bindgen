@@ -252,7 +252,7 @@ pub struct Type {
 impl Type {
     // common
     pub fn kind(&self) -> Enum_CXTypeKind {
-        return self.x.kind;
+        self.x.kind
     }
 
     pub fn declaration(&self) -> Cursor {
@@ -340,7 +340,7 @@ impl Type {
             for i in 0..num {
                 args.push(Type { x: clang_getArgType(self.x, i as c_uint) });
             }
-            return args;
+            args
         }
     }
 
