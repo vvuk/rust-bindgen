@@ -5,7 +5,6 @@ use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::path::Path;
-use std::mem;
 
 use syntax::abi;
 
@@ -44,10 +43,6 @@ struct ClangParserCtx<'a> {
 impl<'a> ClangParserCtx<'a> {
     fn module(&self, id: &ModuleId) -> &Module {
         self.module_map.get(id).expect("Module not found!")
-    }
-
-    fn module_mut(&mut self, id: &ModuleId) -> &mut Module {
-        self.module_map.get_mut(&id).expect("Module not found!")
     }
 
     fn current_module(&self) -> &Module {
