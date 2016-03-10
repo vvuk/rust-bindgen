@@ -27,6 +27,23 @@ struct GenCtx<'r> {
     module_map: ModuleMap,
 }
 
+impl<'r> GenCtx<'r> {
+    fn full_path_for_module(&self, id: ModuleId) -> Vec<String> {
+        let mut ret = vec![];
+
+        let mut current_id = Some(id);
+        while let Some(current) = current_id {
+            let module = &self.module_map.get(&current).unwrap();
+            ret.push(module.name.clone());
+            current_id = module.parent_id;
+        }
+
+        ret.pop(); // The root isn't really here
+        ret.reverse();
+        ret
+    }
+}
+
 fn first<A, B>((val, _): (A, B)) -> A {
     val
 }
@@ -71,7 +88,7 @@ fn rust_type_id(ctx: &mut GenCtx, name: &str) -> String {
     }
 }
 
-fn comp_name(kind: CompKind, name: &String) -> String {
+fn comp_name(kind: CompKind, name: &str) -> String {
     match kind {
         CompKind::Struct => struct_name(name),
         CompKind::Union  => union_name(name),
@@ -1457,13 +1474,8 @@ fn mk_doc_attr(ctx: &mut GenCtx, doc: &str) -> Vec<ast::Attribute> {
 fn cvar_to_rs(ctx: &mut GenCtx, name: String,
                                 mangled: String,
                                 ty: &Type,
-<<<<<<< 685bd1f05323208b587c964b04f027c06bba2711
-                                is_const: bool) -> ast::ForeignItem {
-    let (rust_name, was_mangled) = rust_id(ctx, name.clone());
-=======
                                 is_const: bool) -> P<ast::ForeignItem> {
     let (rust_name, was_mangled) = rust_id(ctx, &name);
->>>>>>> gen: Avoid so much cloning
 
     let mut attrs = Vec::new();
     if !mangled.is_empty() {
@@ -1627,14 +1639,13 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
             let unsafety = if sig.is_safe { ast::Unsafety::Normal } else { ast::Unsafety::Unsafe };
             mk_fn_proto_ty(ctx, &decl, unsafety, sig.abi)
         },
-<<<<<<< 685bd1f05323208b587c964b04f027c06bba2711
         TNamed(ref ti) => {
-            let id = rust_type_id(ctx, ti.borrow().name.clone());
-=======
-        &TNamed(ref ti) => {
             let id = rust_type_id(ctx, &ti.borrow().name);
->>>>>>> gen: Avoid so much cloning
             mk_ty(ctx, false, &[id])
+
+            let mut path = ctx.full_path_for_module(ti.borrow().module_id);
+            path.push(id);
+            mk_ty(ctx, false, &path)
         },
         TComp(ref ci) => {
             let c = ci.borrow();
