@@ -33,12 +33,30 @@ pub struct ClangParserOptions {
 struct ClangParserCtx<'a> {
     options: ClangParserOptions,
     name: HashMap<Cursor, Global>,
-    globals: Vec<Global>,
     builtin_defs: Vec<Cursor>,
+    module_map: ModuleMap,
+    current_module_id: ModuleId,
     logger: &'a (Logger+'a),
     err_count: i32,
-    anonymous_namespaces_found: usize,
-    namespaces: HashMap<String, ClangParserCtx<'a>>,
+    anonymous_modules_found: usize,
+}
+
+impl<'a> ClangParserCtx<'a> {
+    fn module(&self, id: &ModuleId) -> &Module {
+        self.module_map.get(id).expect("Module not found!")
+    }
+
+    fn module_mut(&mut self, id: &ModuleId) -> &mut Module {
+        self.module_map.get_mut(&id).expect("Module not found!")
+    }
+
+    fn current_module(&self) -> &Module {
+        self.module(&self.current_module_id)
+    }
+
+    fn current_module_mut(&mut self) -> &mut Module {
+        self.module_map.get_mut(&self.current_module_id).expect("Module not found!")
+    }
 }
 
 fn match_pattern(ctx: &mut ClangParserCtx, cursor: &Cursor) -> bool {
@@ -73,11 +91,11 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
         };
         let glob_decl = match cursor.kind() {
             CXCursor_StructDecl => {
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, comment, CompKind::Struct, vec!(), layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, ctx.current_module_id, filename, comment, CompKind::Struct, vec!(), layout)));
                 GCompDecl(ci)
             }
             CXCursor_UnionDecl => {
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, comment, CompKind::Union, vec!(), layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, ctx.current_module_id, filename, comment, CompKind::Union, vec!(), layout)));
                 GCompDecl(ci)
             }
             CXCursor_EnumDecl => {
@@ -97,11 +115,11 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                         _ => IInt,
                     }
                 };
-                let ei = Rc::new(RefCell::new(EnumInfo::new(spelling, filename, kind, vec!(), layout)));
+                let ei = Rc::new(RefCell::new(EnumInfo::new(spelling, ctx.current_module_id, filename, kind, vec!(), layout)));
                 GEnumDecl(ei)
             }
             CXCursor_ClassTemplate => {
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, comment, CompKind::Struct, vec!(), layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, ctx.current_module_id, filename, comment, CompKind::Struct, vec!(), layout)));
                 GCompDecl(ci)
             }
             CXCursor_ClassDecl => {
@@ -116,12 +134,12 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                         list
                     }
                 };
-                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, filename, comment, CompKind::Struct, vec!(), layout)));
+                let ci = Rc::new(RefCell::new(CompInfo::new(spelling, ctx.current_module_id, filename, comment, CompKind::Struct, vec!(), layout)));
                 ci.borrow_mut().args = args;
                 GCompDecl(ci)
             }
             CXCursor_TypedefDecl => {
-                let ti = Rc::new(RefCell::new(TypeInfo::new(spelling, TVoid, layout)));
+                let ti = Rc::new(RefCell::new(TypeInfo::new(spelling, ctx.current_module_id, TVoid, layout)));
                 GType(ti)
             }
             CXCursor_VarDecl => {
@@ -156,7 +174,7 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
 
 fn opaque_decl(ctx: &mut ClangParserCtx, decl: &Cursor) {
     let name = decl_name(ctx, decl);
-    ctx.globals.push(name);
+    ctx.current_module_mut().globals.push(name);
 }
 
 fn fwd_decl<F:FnOnce(&mut ClangParserCtx)->()>(ctx: &mut ClangParserCtx, cursor: &Cursor, f: F) {
@@ -258,6 +276,7 @@ fn mk_fn_sig(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Fu
 
 fn conv_decl_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Type {
     let ty_decl = &ty.declaration();
+    println!("Declaration kind: {} {}", ty_decl.spelling(), kind_to_str(ty_decl.kind()));
     return match ty_decl.kind() {
         CXCursor_StructDecl |
         CXCursor_UnionDecl |
@@ -301,7 +320,7 @@ fn conv_decl_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il:
         }
         CXCursor_NoDeclFound | CXCursor_TypeAliasDecl => {
             let layout = Layout::new(ty.size(), ty.align());
-            TNamed(Rc::new(RefCell::new(TypeInfo::new(ty.spelling().replace("const ", ""), TVoid, layout))))
+            TNamed(Rc::new(RefCell::new(TypeInfo::new(ty.spelling().replace("const ", ""), ctx.current_module_id, TVoid, layout))))
         }
         _ => {
             let fail = ctx.options.fail_on_unknown_type;
@@ -317,7 +336,7 @@ fn conv_decl_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il:
 }
 
 fn conv_ty(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Type {
-    debug!("conv_ty: ty=`{}` sp=`{}` loc=`{}`", type_to_str(ty.kind()), cursor.spelling(), cursor.location());
+    println!("conv_ty: ty=`{}` sp=`{}` loc=`{}`", type_to_str(ty.kind()), cursor.spelling(), cursor.location());
 
     let layout = Layout::new(ty.size(), ty.align());
     match ty.kind() {
@@ -419,6 +438,7 @@ impl Annotations {
 fn visit_composite(cursor: &Cursor, parent: &Cursor,
                    ctx: &mut ClangParserCtx,
                    ci: &mut CompInfo) -> Enum_CXVisitorResult {
+    println!("visit_composite: {} {} {}", kind_to_str(cursor.kind()), cursor.spelling(), cursor.location());
 
     fn is_bitfield_continuation(field: &il::FieldInfo, ty: &il::Type, width: u32) -> bool {
         match (&field.bitfields, ty) {
@@ -547,7 +567,7 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
         CXCursor_TemplateTypeParameter => {
             let ty = conv_ty(ctx, &cursor.cur_type(), cursor);
             let layout = Layout::new(ty.size(), ty.align());
-            ci.args.push(TNamed(Rc::new(RefCell::new(TypeInfo::new(cursor.spelling(), TVoid, layout)))));
+            ci.args.push(TNamed(Rc::new(RefCell::new(TypeInfo::new(cursor.spelling(), ctx.current_module_id, TVoid, layout)))));
         }
         CXCursor_EnumDecl => {
             let anno = Annotations::new(cursor);
@@ -655,7 +675,7 @@ fn visit_composite(cursor: &Cursor, parent: &Cursor,
                     sig.args.insert(0, ("this".to_string(),TPtr(Box::new(TVoid), cursor.cur_type().is_const(), false, Layout::zero())));
                 } else {
                     sig.args.insert(0, ("this".to_string(),
-                                        TPtr(Box::new(TNamed(Rc::new(RefCell::new(TypeInfo::new(ci.name.clone(), TVoid, Layout::zero()))))), cursor.cur_type().is_const(), false, Layout::zero())));
+                                        TPtr(Box::new(TNamed(Rc::new(RefCell::new(TypeInfo::new(ci.name.clone(), ctx.current_module_id, TVoid, Layout::zero()))))), cursor.cur_type().is_const(), false, Layout::zero())));
                 }
             }
 
@@ -739,6 +759,7 @@ fn visit_literal(cursor: &Cursor, unit: &TranslationUnit) -> Option<i64> {
 fn visit_top(cursor: &Cursor,
                  mut ctx: &mut ClangParserCtx,
                  unit: &TranslationUnit) -> Enum_CXVisitorResult {
+    println!("visit_top: {}", cursor.location());
     if !match_pattern(ctx, cursor) {
         return CXChildVisit_Continue;
     }
@@ -762,7 +783,7 @@ fn visit_top(cursor: &Cursor,
                 if anno.hide {
                     ci.borrow_mut().hide = true;
                 }
-                ctx_.globals.push(GComp(ci));
+                ctx_.current_module_mut().globals.push(GComp(ci));
             });
             CXChildVisit_Continue
         }
@@ -775,7 +796,7 @@ fn visit_top(cursor: &Cursor,
                     let mut ei_ = ei.borrow_mut();
                     visit_enum(c, &mut ei_.items)
                 });
-                ctx_.globals.push(GEnum(ei));
+                ctx_.current_module_mut().globals.push(GEnum(ei));
             });
             CXChildVisit_Continue
         }
@@ -801,7 +822,7 @@ fn visit_top(cursor: &Cursor,
             let mut vi = vi.borrow_mut();
 
             vi.ty = TFuncPtr(mk_fn_sig(ctx, &cursor.cur_type(), cursor));
-            ctx.globals.push(func);
+            ctx.current_module_mut().globals.push(func);
 
             CXChildVisit_Continue
         }
@@ -825,7 +846,7 @@ fn visit_top(cursor: &Cursor,
                 vi.val = visit_literal(c, unit);
                 CXChildVisit_Continue
             });
-            ctx.globals.push(var);
+            ctx.current_module_mut().globals.push(var);
 
             CXChildVisit_Continue
         }
@@ -845,7 +866,7 @@ fn visit_top(cursor: &Cursor,
             let mut ti = ti.borrow_mut();
             ti.ty = ty.clone();
             ti.comment = cursor.raw_comment();
-            ctx.globals.push(typedef);
+            ctx.current_module_mut().globals.push(typedef);
 
             opaque_ty(ctx, &under_ty);
 
@@ -872,24 +893,33 @@ fn visit_top(cursor: &Cursor,
                     }
                 }
             }.unwrap_or_else(|| {
-                ctx.anonymous_namespaces_found += 1;
-                format!("__anonymous{}", ctx.anonymous_namespaces_found)
+                ctx.anonymous_modules_found += 1;
+                format!("__anonymous{}", ctx.anonymous_modules_found)
             });
 
-            let mut ns_ctx = ctx.namespaces.entry(namespace_name).or_insert(
-                ClangParserCtx {
-                    options: ctx.options.clone(),
-                    name: HashMap::new(),
-                    builtin_defs: vec!(),
-                    globals: vec!(),
-                    logger: ctx.logger,
-                    err_count: 0,
-                    anonymous_namespaces_found: 0,
-                    namespaces: HashMap::new(),
-                }
-            );
+            // Find an existing namespace children of the current one
+            let mod_id = ctx.current_module()
+                            .children_ids.iter()
+                            .find(|id| ctx.module_map.get(id).unwrap().name == namespace_name)
+                            .map(|id| *id);
 
-            cursor.visit(|cur, _: &Cursor| visit_top(cur, &mut ns_ctx, &unit));
+            let mod_id = match mod_id {
+                Some(id) => id,
+                None => {
+                    println!("Creating namespace {}", namespace_name);
+                    let parent_id = ctx.current_module_id;
+                    let id = ModuleId::next();
+                    ctx.module_map.get_mut(&parent_id).unwrap().children_ids.push(id);
+                    ctx.module_map.insert(id, Module::new(namespace_name, Some(parent_id)));
+                    id
+                }
+            };
+
+            let previous_id = ctx.current_module_id;
+
+            ctx.current_module_id = mod_id;
+            cursor.visit(|cur, _: &Cursor| visit_top(cur, &mut ctx, &unit));
+            ctx.current_module_id = previous_id;
 
             return CXChildVisit_Continue;
         }
@@ -909,7 +939,7 @@ fn visit_top(cursor: &Cursor,
             };
             vi.is_const = true;
             vi.val = val;
-            ctx.globals.push(var);
+            ctx.current_module_mut().globals.push(var);
 
             return CXChildVisit_Continue;
         }
@@ -926,17 +956,19 @@ fn log_err_warn(ctx: &mut ClangParserCtx, msg: &str, is_err: bool) {
     }
 }
 
-pub fn parse(options: ClangParserOptions, logger: &Logger) -> Result<Module, ()> {
+pub fn parse(options: ClangParserOptions, logger: &Logger) -> Result<ModuleMap, ()> {
     let mut ctx = ClangParserCtx {
         options: options,
         name: HashMap::new(),
         builtin_defs: vec!(),
-        globals: vec!(),
+        module_map: ModuleMap::new(),
+        current_module_id: ROOT_MODULE_ID,
         logger: logger,
         err_count: 0,
-        anonymous_namespaces_found: 0,
-        namespaces: HashMap::new(),
+        anonymous_modules_found: 0,
     };
+
+    ctx.module_map.insert(ROOT_MODULE_ID, Module::new("root".to_owned(), None));
 
     let ix = cx::Index::create(false, true);
     if ix.is_null() {
@@ -981,19 +1013,5 @@ pub fn parse(options: ClangParserOptions, logger: &Logger) -> Result<Module, ()>
         return Err(())
     }
 
-    let mut root = Module::new();
-
-    fn add_submodules<'a>(module: &mut Module,
-                          mut ctx: ClangParserCtx<'a>) {
-        mem::replace(module.globals(), ctx.globals);
-        for (name, ns) in ctx.namespaces.drain() {
-            let mut new = Module::new();
-            add_submodules(&mut new, ns);
-            module.add_submodule(name, new);
-        }
-    }
-
-    add_submodules(&mut root, ctx);
-
-    Ok(root)
+    Ok(ctx.module_map)
 }
