@@ -142,7 +142,10 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                         } else {
                             None
                         }
-                    }).expect("Template class wasn't declared when parsing specialisation!")
+                    }).unwrap_or_else(|| {
+                        ctx.logger.warn("Template class wasn't declared when parsing specialisation!");
+                        ctx.current_module_id
+                    })
                 };
 
                 let ci = Rc::new(RefCell::new(CompInfo::new(spelling, module_id, filename, comment, CompKind::Struct, vec!(), layout)));
