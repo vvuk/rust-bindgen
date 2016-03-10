@@ -38,4 +38,6 @@ namespace w {
     };
 
     C<int> foo();
+
+    C<float> barr(); // <- This is the problematic one
 }
