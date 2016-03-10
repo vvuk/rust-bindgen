@@ -152,11 +152,14 @@ impl Bindings {
 
         let span = span.unwrap_or(DUMMY_SP);
 
-        let root_module = try!(parse_headers(options, logger));
+        let module_map = try!(parse_headers(options, logger));
 
         let module = ast::Mod {
             inner: span,
-            items: gen::gen_mods(&options.links[..], root_module, span)
+            items: gen::gen_mods(&options.links[..],
+                                 module_map,
+                                 options.enable_cxx_namespaces,
+                                 span)
         };
 
         Ok(Bindings {

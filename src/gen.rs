@@ -24,10 +24,16 @@ struct GenCtx<'r> {
     ext_cx: base::ExtCtxt<'r>,
     span: Span,
     module_map: ModuleMap,
+    enable_cxx_namespaces: bool,
+    current_module_id: ModuleId,
 }
 
 impl<'r> GenCtx<'r> {
     fn full_path_for_module(&self, id: ModuleId) -> Vec<String> {
+        if !self.enable_cxx_namespaces {
+            return vec![];
+        }
+
         let mut ret = vec![];
 
         let mut current_id = Some(id);
@@ -35,6 +41,10 @@ impl<'r> GenCtx<'r> {
             let module = &self.module_map.get(&current).unwrap();
             ret.push(module.name.clone());
             current_id = module.parent_id;
+        }
+
+        if self.current_module_id == ROOT_MODULE_ID {
+            ret.pop(); // The root module doens'n need a root:: in the pattern
         }
 
         ret.reverse();
@@ -232,12 +242,15 @@ fn gen_unmangle_method(ctx: &mut GenCtx,
     P(item)
 }
 
-pub fn gen_mods(links: &[(String, LinkType)], mut map: ModuleMap, span: Span) -> Vec<P<ast::Item>> {
+pub fn gen_mods(links: &[(String, LinkType)],
+                map: ModuleMap,
+                enable_namespaces: bool,
+                span: Span) -> Vec<P<ast::Item>> {
     // Create a dummy ExtCtxt. We only need this for string interning and that uses TLS.
     let mut features = Features::new();
     features.allow_quote = true;
     let cfg = ExpansionConfig {
-        crate_name: "xxx".to_string(),
+        crate_name: "xxx".to_owned(),
         features: Some(&features),
         recursion_limit: 64,
         trace_mac: false,
@@ -248,7 +261,10 @@ pub fn gen_mods(links: &[(String, LinkType)], mut map: ModuleMap, span: Span) ->
         ext_cx: base::ExtCtxt::new(sess, Vec::new(), cfg, &mut feature_gated_cfgs),
         span: span,
         module_map: map,
+        enable_cxx_namespaces: enable_namespaces,
+        current_module_id: ROOT_MODULE_ID,
     };
+
     ctx.ext_cx.bt_push(ExpnInfo {
         call_site: ctx.span,
         callee: NameAndSpan {
@@ -259,6 +275,21 @@ pub fn gen_mods(links: &[(String, LinkType)], mut map: ModuleMap, span: Span) ->
     });
 
     if let Some(root_mod) = gen_mod(&mut ctx, ROOT_MODULE_ID, links, span) {
+        if !ctx.enable_cxx_namespaces {
+            match root_mod.node {
+                // XXX This clone might be really expensive, but doing:
+                // ast::ItemMod(ref mut root) => {
+                //     return ::std::mem::replace(&mut root.items, vec![]);
+                // }
+                // fails with "error: cannot borrow immutable anonymous field as mutable".
+                // So...
+                ast::ItemMod(ref root) => {
+                    return root.items.clone()
+                }
+                _ => unreachable!(),
+            }
+        }
+
         let root_export = P(ast::Item {
             ident: ctx.ext_cx.ident_of(""),
             attrs: vec![],
@@ -320,6 +351,8 @@ fn gen_mod(mut ctx: &mut GenCtx,
     } else {
         vec![]
     };
+
+    ctx.current_module_id = module_id;
 
     globals.extend(gen_globals(&mut ctx, links, &module.globals).into_iter());
 
@@ -406,7 +439,7 @@ fn gen_globals(mut ctx: &mut GenCtx,
             },
             GVar(vi) => {
                 let v = vi.borrow();
-                let ty = cty_to_rs(&mut ctx, &v.ty, v.is_const);
+                let ty = cty_to_rs(&mut ctx, &v.ty, v.is_const, true);
                 defs.push(const_to_rs(&mut ctx, v.name.clone(), v.val.unwrap(), ty));
             },
             _ => { }
@@ -695,9 +728,9 @@ fn ctypedef_to_rs(ctx: &mut GenCtx, ty: TypeInfo) -> Vec<P<ast::Item>> {
     fn mk_item(ctx: &mut GenCtx, name: &str, comment: &str, ty: &Type) -> P<ast::Item> {
         let rust_name = rust_type_id(ctx, name);
         let rust_ty = if cty_is_translatable(ty) {
-            cty_to_rs(ctx, ty, true)
+            cty_to_rs(ctx, ty, true, true)
         } else {
-            cty_to_rs(ctx, &TVoid, true)
+            cty_to_rs(ctx, &TVoid, true, true)
         };
         let base = ast::ItemTy(
             P(ast::Ty {
@@ -742,7 +775,7 @@ fn comp_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo)
 fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Item>> {
     let layout = ci.layout;
     let members = &ci.members;
-    let args = &ci.args;
+    let template_args = &ci.args;
     let methodlist = &ci.methods;
     let mut fields = vec!();
     let mut methods = vec!();
@@ -754,7 +787,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
     let mut bitfields: u32 = 0;
 
     if ci.hide ||
-       args.iter().any(|f| f == &TVoid) {
+       template_args.iter().any(|f| f == &TVoid) {
         return vec!();
     }
 
@@ -837,10 +870,10 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
 
     if members.is_empty() {
         let mut phantom_count = 0;
-        for arg in args {
+        for arg in template_args {
             let f_name = format!("_phantom{}", phantom_count);
             phantom_count += 1;
-            let inner_type = P(cty_to_rs(ctx, &arg, true));
+            let inner_type = P(cty_to_rs(ctx, &arg, true, false));
             fields.push(respan(ctx.span, ast::StructField_ {
                 kind: ast::NamedField(
                     ctx.ext_cx.ident_of(&f_name),
@@ -928,7 +961,10 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
             } else {
                 f.ty.clone()
             };
-            let f_ty = P(cty_to_rs(ctx, &f_ty, f.bitfields == None));
+
+            // If the member is not a template argument, it needs the full path.
+            let needs_full_path = !template_args.iter().any(|arg| *arg == f_ty);
+            let f_ty = P(cty_to_rs(ctx, &f_ty, f.bitfields.is_none(), needs_full_path));
 
             fields.push(respan(ctx.span, ast::StructField_ {
                 kind: ast::NamedField(
@@ -979,7 +1015,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<P<ast::Ite
     } else {
         ast::VariantData::Struct(fields, ast::DUMMY_NODE_ID)
     };
-    let ty_params = args.iter().map(|gt| {
+    let ty_params = template_args.iter().map(|gt| {
         let name = match gt {
             &TNamed(ref ti) => {
                 ctx.ext_cx.ident_of(&ti.borrow().name)
@@ -1128,7 +1164,7 @@ fn cunion_to_rs(ctx: &mut GenCtx, name: String, layout: Layout, members: Vec<Com
         ast::ImplPolarity::Positive,
         empty_generics(),
         None,
-        P(cty_to_rs(ctx, &union, true)),
+        P(cty_to_rs(ctx, &union, true, true)),
         gen_comp_methods(ctx, data_field_name, 0, CompKind::Union, &members, &mut extra),
     );
 
@@ -1241,7 +1277,7 @@ fn gen_comp_methods(ctx: &mut GenCtx, data_field: &str, data_offset: usize,
         if f.bitfields.is_some() { return None; }
 
         let f_name = first(rust_id(ctx, &f.name));
-        let ret_ty = P(cty_to_rs(ctx, &TPtr(Box::new(f.ty.clone()), false, false, Layout::zero()), true));
+        let ret_ty = P(cty_to_rs(ctx, &TPtr(Box::new(f.ty.clone()), false, false, Layout::zero()), true, true));
 
         // When the offset is zero, generate slightly prettier code.
         let method = {
@@ -1316,7 +1352,7 @@ fn gen_bitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
                        field_name: &String, field_type: &Type,
                        offset: usize, width: u32) -> ast::ImplItem {
     let input_type = type_for_bitfield_width(ctx, width);
-    let field_type = cty_to_rs(ctx, &field_type, false);
+    let field_type = cty_to_rs(ctx, &field_type, false, true);
     let setter_name = ctx.ext_cx.ident_of(&format!("set_{}", field_name));
     let bindgen_ident = ctx.ext_cx.ident_of(&*bindgen_name);
 
@@ -1336,7 +1372,7 @@ fn gen_bitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
 
 fn gen_fullbitfield_method(ctx: &mut GenCtx, bindgen_name: &String,
                            field_type: &Type, bitfields: &[(String, u32)]) -> ast::ImplItem {
-    let field_type = cty_to_rs(ctx, field_type, false);
+    let field_type = cty_to_rs(ctx, field_type, false, true);
     let mut args = vec!();
     let mut unnamed: usize = 0;
     for &(ref name, width) in bitfields.iter() {
@@ -1521,7 +1557,7 @@ fn cvar_to_rs(ctx: &mut GenCtx, name: String,
         attrs.push(mk_link_name_attr(ctx, name));
     }
 
-    let val_ty = P(cty_to_rs(ctx, ty, true));
+    let val_ty = P(cty_to_rs(ctx, ty, true, true));
 
     return P(ast::ForeignItem {
         ident: ctx.ext_cx.ident_of(&rust_name),
@@ -1542,8 +1578,8 @@ fn cfuncty_to_rs(ctx: &mut GenCtx,
         TVoid => ast::DefaultReturn(ctx.span),
         // Disable references in returns for now
         TPtr(ref t, is_const, _, ref layout) =>
-            ast::Return(P(cty_to_rs(ctx, &TPtr(t.clone(), is_const, false, layout.clone()), true))),
-        _ => ast::Return(P(cty_to_rs(ctx, rty, true)))
+            ast::Return(P(cty_to_rs(ctx, &TPtr(t.clone(), is_const, false, layout.clone()), true, true))),
+        _ => ast::Return(P(cty_to_rs(ctx, rty, true, true)))
     };
 
     let mut unnamed: usize = 0;
@@ -1563,8 +1599,8 @@ fn cfuncty_to_rs(ctx: &mut GenCtx,
         // (if any) are those specified within the [ and ] of the array type
         // derivation.
         let arg_ty = P(match t {
-            &TArray(ref typ, _, ref l) => cty_to_rs(ctx, &TPtr(typ.clone(), false, false, l.clone()), true),
-            _ => cty_to_rs(ctx, t, true),
+            &TArray(ref typ, _, ref l) => cty_to_rs(ctx, &TPtr(typ.clone(), false, false, l.clone()), true, true),
+            _ => cty_to_rs(ctx, t, true, true),
         });
 
         ast::Arg {
@@ -1623,7 +1659,7 @@ fn cfunc_to_rs(ctx: &mut GenCtx,
            });
 }
 
-fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
+fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool, use_full_path: bool) -> ast::Ty {
     match ty {
         &TVoid => mk_ty(ctx, true, &["libc".to_owned(), "c_void".to_owned()]),
         &TInt(i, ref layout) => match i {
@@ -1653,7 +1689,7 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
             FDouble => mk_ty(ctx, false, &["f64".to_owned()])
         },
         &TPtr(ref t, is_const, _is_ref, _) => {
-            let id = cty_to_rs(ctx, &**t, allow_bool);
+            let id = cty_to_rs(ctx, &**t, allow_bool, use_full_path);
 /*
             if is_ref {
                 mk_refty(ctx, &id, is_const)
@@ -1663,7 +1699,7 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
 //            }
         },
         &TArray(ref t, s, _) => {
-            let ty = cty_to_rs(ctx, &**t, allow_bool);
+            let ty = cty_to_rs(ctx, &**t, allow_bool, use_full_path);
             mk_arrty(ctx, &ty, s)
         },
         &TFuncPtr(ref sig) => {
@@ -1677,20 +1713,42 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool) -> ast::Ty {
         &TNamed(ref ti) => {
             let id = rust_type_id(ctx, &ti.borrow().name);
 
-            let mut path = ctx.full_path_for_module(ti.borrow().module_id);
-            path.push(id);
-            mk_ty(ctx, false, &path)
+            if use_full_path {
+                let mut path = ctx.full_path_for_module(ti.borrow().module_id);
+                path.push(id);
+                mk_ty(ctx, false, &path)
+            } else {
+                mk_ty(ctx, false, &[id])
+            }
         },
         &TComp(ref ci) => {
             let c = ci.borrow();
+            let id = comp_name(c.kind, &c.name);
+
             let args = c.args.iter().map(|gt| {
-                P(cty_to_rs(ctx, gt, allow_bool))
+                P(cty_to_rs(ctx, gt, allow_bool, false))
             }).collect();
-            mk_ty_args(ctx, false, &[comp_name(c.kind, &c.name)], args)
+
+            if use_full_path {
+                let mut path = ctx.full_path_for_module(c.module_id);
+                path.push(id);
+                mk_ty_args(ctx, false, &path, args)
+            } else {
+                mk_ty_args(ctx, false, &[id], args)
+            }
+
         },
         &TEnum(ref ei) => {
             let e = ei.borrow();
-            mk_ty(ctx, false, &[enum_name(&e.name)])
+            let id = enum_name(&e.name);
+
+            if use_full_path {
+                let mut path = ctx.full_path_for_module(e.module_id);
+                path.push(id);
+                mk_ty(ctx, false, &path)
+            } else {
+                mk_ty(ctx, false, &[id])
+            }
         }
     }
 }
@@ -1738,17 +1796,18 @@ fn mk_ty(ctx: &GenCtx, global: bool, segments: &[String]) -> ast::Ty {
 }
 
 fn mk_ty_args(ctx: &GenCtx, global: bool, segments: &[String], args: Vec<P<ast::Ty>>) -> ast::Ty {
+    let segment_count = segments.len();
     let ty = ast::TyPath(
         None,
         ast::Path {
             span: ctx.span,
             global: global,
-            segments: segments.iter().map(|s| {
+            segments: segments.iter().enumerate().map(|(i, s)| {
                 ast::PathSegment {
                     identifier: ctx.ext_cx.ident_of(s),
                     parameters: ast::AngleBracketedParameters(ast::AngleBracketedParameterData {
                         lifetimes: vec!(),
-                        types: OwnedSlice::from_vec(args.clone()),
+                        types: OwnedSlice::from_vec(if i == segment_count - 1 { args.clone() } else { vec![] }),
                         bindings: OwnedSlice::empty(),
                     }),
                 }

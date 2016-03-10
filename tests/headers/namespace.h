@@ -12,9 +12,30 @@ namespace {
     namespace empty {}
 
     void foo();
-
-    class A {
+    struct A {
         whatever::whatever_int_t b;
+    public:
+        int lets_hope_this_works();
     };
 }
 
+template<typename T>
+class C: public A {
+    T m_c;
+};
+
+
+template<>
+class C<int>;
+
+
+namespace w {
+
+    template<typename T>
+    class D {
+        C<T> m_c;
+        void wat();
+    };
+
+    C<int> foo();
+}
