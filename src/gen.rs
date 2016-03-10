@@ -38,40 +38,6 @@ impl<'r> GenCtx<'r> {
             current_id = module.parent_id;
         }
 
-        // XXX This is done because we don't actually print the root module.
-        //
-        // We include a lot of top-level "use's" instead.
-        //
-        // It might be desirable something like:
-        //
-        // ```
-        // use __randomlygeneratednameforroot::*;
-        // mod __randomlygeneratednameforroot {
-        //   pub mod b {
-        //     pub type ty = i32;
-        //   }
-        //   pub mod a {
-        //     static C: __randomlygeneratednameforroot::b::ty;
-        //   }
-        // }
-        // ```
-        //
-        // Vs:
-        //
-        // ```
-        // pub mod b {
-        //   use a;
-        //   pub type ty = i32;
-        // }
-        //
-        // pub mod a {
-        //   use b;
-        //   static C: b::ty;
-        // }
-        // ```
-        //
-        // Or even switching via flag back and forth.
-        ret.pop(); // The root isn't really here
         ret.reverse();
         ret
     }
@@ -293,50 +259,95 @@ pub fn gen_mods(links: &[(String, LinkType)], mut map: ModuleMap, span: Span) ->
         }
     });
 
-    gen_mod(&mut ctx, ROOT_MODULE_ID, links, span).items
+    if let Some(root_mod) = gen_mod(&mut ctx, ROOT_MODULE_ID, links, span) {
+        let root_export = P(ast::Item {
+            ident: ctx.ext_cx.ident_of(""),
+            attrs: vec![],
+            id: ast::DUMMY_NODE_ID,
+            node: ast::ItemUse(P(
+                Spanned {
+                    node: ast::ViewPathGlob(ast::Path {
+                        span: span.clone(),
+                        global: false,
+                        segments: vec![ast::PathSegment {
+                            identifier: root_mod.ident,
+                            parameters: ast::PathParameters::none(),
+                        }]
+                    }),
+                    span: span.clone(),
+                })),
+            vis: ast::Public,
+            span: span.clone(),
+        });
+
+        vec![root_export, root_mod]
+    } else {
+        vec![]
+    }
 }
 
 fn gen_mod(mut ctx: &mut GenCtx,
            module_id: ModuleId,
            links: &[(String, LinkType)],
-           span: Span) -> ast::Mod {
+           span: Span) -> Option<P<ast::Item>> {
 
     // XXX avoid this clone
     let module = ctx.module_map.get(&module_id).unwrap().clone();
 
-    let mut globals = gen_globals(&mut ctx, module_id, links, &module.globals);
+    // Import just the root to minimise name conflicts
+    let mut globals = if module_id != ROOT_MODULE_ID {
+        // XXX Pass this previously instead of looking it up always?
+        let root = ctx.ext_cx.ident_of(&ctx.module_map.get(&ROOT_MODULE_ID).unwrap().name);
+        vec![P(ast::Item {
+            ident: ctx.ext_cx.ident_of(""),
+            attrs: vec![],
+            id: ast::DUMMY_NODE_ID,
+            node: ast::ItemUse(P(
+                Spanned {
+                    node: ast::ViewPathSimple(root.clone(),
+                              ast::Path {
+                                  span: span.clone(),
+                                  global: false,
+                                  segments: vec![ast::PathSegment {
+                                      identifier: root,
+                                      parameters: ast::PathParameters::none(),
+                                  }]
+                              }),
+                    span: span.clone(),
+                })),
+            vis: ast::Public,
+            span: span.clone(),
+        })]
+    } else {
+        vec![]
+    };
+
+    globals.extend(gen_globals(&mut ctx, links, &module.globals).into_iter());
 
     globals.extend(module.children_ids.iter().filter_map(|id| {
-        let name = ctx.module_map.get(id).unwrap().name.clone();
-        let module = gen_mod(ctx, *id, links, span.clone());
-
-        // mod foo; represents a module in another file, not an empty module,
-        // so...
-        if !module.items.is_empty() {
-            Some(P(ast::Item {
-                ident: ctx.ext_cx.ident_of(&name),
-                attrs: vec![],
-                id: ast::DUMMY_NODE_ID,
-                node: ast::ItemMod(module),
-                vis: ast::Public,
-                span: span.clone(),
-            }))
-        } else {
-            None
-        }
+        gen_mod(ctx, *id, links, span.clone())
     }));
 
-
-    ast::Mod {
-        inner: span,
-        items: globals,
+    if !globals.is_empty() {
+        Some(P(ast::Item {
+            ident: ctx.ext_cx.ident_of(&module.name),
+            attrs: vec![],
+            id: ast::DUMMY_NODE_ID,
+            node: ast::ItemMod(ast::Mod {
+                inner: span,
+                items: globals,
+            }),
+            vis: ast::Public,
+            span: span.clone(),
+        }))
+    } else {
+        None
     }
 }
 
 
 
 fn gen_globals(mut ctx: &mut GenCtx,
-               current_module: ModuleId,
                links: &[(String, LinkType)],
                globs: &[Global]) -> Vec<P<ast::Item>> {
     let uniq_globs = tag_dup_decl(globs);
