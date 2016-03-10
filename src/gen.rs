@@ -22,7 +22,8 @@ use types::*;
 
 struct GenCtx<'r> {
     ext_cx: base::ExtCtxt<'r>,
-    span: Span
+    span: Span,
+    module_map: ModuleMap,
 }
 
 fn first<A, B>((val, _): (A, B)) -> A {
@@ -215,7 +216,7 @@ fn gen_unmangle_method(ctx: &mut GenCtx,
     P(item)
 }
 
-pub fn gen_mods(links: &[(String, LinkType)], mut root_module: Module, span: Span) -> Vec<P<ast::Item>> {
+pub fn gen_mods(links: &[(String, LinkType)], mut map: ModuleMap, span: Span) -> Vec<P<ast::Item>> {
     // Create a dummy ExtCtxt. We only need this for string interning and that uses TLS.
     let mut features = Features::new();
     features.allow_quote = true;
@@ -229,7 +230,8 @@ pub fn gen_mods(links: &[(String, LinkType)], mut root_module: Module, span: Spa
     let mut feature_gated_cfgs = vec![];
     let mut ctx = GenCtx {
         ext_cx: base::ExtCtxt::new(sess, Vec::new(), cfg, &mut feature_gated_cfgs),
-        span: span
+        span: span,
+        module_map: map,
     };
     ctx.ext_cx.bt_push(ExpnInfo {
         call_site: ctx.span,
@@ -240,17 +242,22 @@ pub fn gen_mods(links: &[(String, LinkType)], mut root_module: Module, span: Spa
         }
     });
 
-    gen_mod(&mut ctx, &mut root_module, links, span).items
+    gen_mod(&mut ctx, ROOT_MODULE_ID, links, span).items
 }
 
 fn gen_mod(mut ctx: &mut GenCtx,
-           mut module: &mut Module,
+           module_id: ModuleId,
            links: &[(String, LinkType)],
            span: Span) -> ast::Mod {
 
-    let mut globals = gen_globals(&mut ctx, links, module.globals());
-    globals.extend(module.submodules().drain().filter_map(|(name, mut module)| {
-        let module = gen_mod(ctx, &mut module, links, span.clone());
+    // XXX avoid this clone
+    let module = ctx.module_map.get(&module_id).unwrap().clone();
+
+    let mut globals = gen_globals(&mut ctx, module_id, links, &module.globals);
+
+    globals.extend(module.children_ids.iter().filter_map(|id| {
+        let name = ctx.module_map.get(id).unwrap().name.clone();
+        let module = gen_mod(ctx, *id, links, span.clone());
 
         // mod foo; represents a module in another file, not an empty module,
         // so...
@@ -278,6 +285,7 @@ fn gen_mod(mut ctx: &mut GenCtx,
 
 
 fn gen_globals(mut ctx: &mut GenCtx,
+               current_module: ModuleId,
                links: &[(String, LinkType)],
                globs: &[Global]) -> Vec<P<ast::Item>> {
     let uniq_globs = tag_dup_decl(globs);
@@ -316,7 +324,7 @@ fn gen_globals(mut ctx: &mut GenCtx,
         match g {
             GType(ti) => {
                 let t = ti.borrow().clone();
-                defs.extend(ctypedef_to_rs(&mut ctx, t.name.clone(), t.comment.clone(), &t.ty).into_iter())
+                defs.extend(ctypedef_to_rs(&mut ctx, t).into_iter())
             },
             GCompDecl(ci) => {
                 let c = ci.borrow().clone();
@@ -622,8 +630,8 @@ fn tag_dup_decl(gs: &[Global]) -> Vec<Global> {
     return res;
 }
 
-fn ctypedef_to_rs(ctx: &mut GenCtx, name: String, comment: String, ty: &Type) -> Vec<P<ast::Item>> {
-    fn mk_item(ctx: &mut GenCtx, name: String, comment: String, ty: &Type) -> P<ast::Item> {
+fn ctypedef_to_rs(ctx: &mut GenCtx, ty: TypeInfo) -> Vec<P<ast::Item>> {
+    fn mk_item(ctx: &mut GenCtx, name: &str, comment: &str, ty: &Type) -> P<ast::Item> {
         let rust_name = rust_type_id(ctx, name);
         let rust_ty = if cty_is_translatable(ty) {
             cty_to_rs(ctx, ty, true)
@@ -649,16 +657,16 @@ fn ctypedef_to_rs(ctx: &mut GenCtx, name: String, comment: String, ty: &Type) ->
         })
     }
 
-    match *ty {
+    match ty.ty {
         TComp(ref ci) => {
             assert!(!ci.borrow().name.is_empty());
-            vec!(mk_item(ctx, name, comment, ty))
+            vec!(mk_item(ctx, &ty.name, &ty.comment, &ty.ty))
         },
         TEnum(ref ei) => {
             assert!(!ei.borrow().name.is_empty());
-            vec!(mk_item(ctx, name, comment, ty))
+            vec!(mk_item(ctx, &ty.name, &ty.comment, &ty.ty))
         },
-        _ => vec!(mk_item(ctx, name, comment, ty))
+        _ => vec!(mk_item(ctx, &ty.name, &ty.comment, &ty.ty)),
     }
 }
 
@@ -1024,18 +1032,19 @@ fn opaque_to_rs(ctx: &mut GenCtx, name: String) -> P<ast::Item> {
 fn cunion_to_rs(ctx: &mut GenCtx, name: String, layout: Layout, members: Vec<CompMember>) -> Vec<P<ast::Item>> {
     fn mk_item(ctx: &mut GenCtx, name: String, item: ast::Item_, vis:
                ast::Visibility, attrs: Vec<ast::Attribute>) -> P<ast::Item> {
-        return P(ast::Item {
+        P(ast::Item {
             ident: ctx.ext_cx.ident_of(&name),
             attrs: attrs,
             id: ast::DUMMY_NODE_ID,
             node: item,
             vis: vis,
             span: ctx.span
-        });
+        })
     }
 
-    let ci = Rc::new(RefCell::new(CompInfo::new(name.clone(), name.clone(), "".to_owned(), CompKind::Union, members.clone(), layout)));
-    let union = TNamed(Rc::new(RefCell::new(TypeInfo::new(name.clone(), TComp(ci), layout))));
+    // XXX what module id is correct?
+    let ci = Rc::new(RefCell::new(CompInfo::new(name.clone(), ROOT_MODULE_ID, name.clone(), "".to_owned(), CompKind::Union, members.clone(), layout)));
+    let union = TNamed(Rc::new(RefCell::new(TypeInfo::new(name.clone(), ROOT_MODULE_ID, TComp(ci), layout))));
 
     // Nested composites may need to emit declarations and implementations as
     // they are encountered.  The declarations end up in 'extra' and are emitted
