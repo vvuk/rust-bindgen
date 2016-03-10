@@ -20,7 +20,7 @@ use syntax::print::pprust;
 use syntax::print::pp::eof;
 use syntax::ptr::P;
 
-use types::Module;
+use types::ModuleMap;
 
 mod types;
 mod clangll;
@@ -200,7 +200,7 @@ impl Logger for DummyLogger {
     fn warn(&self, _msg: &str) { }
 }
 
-fn parse_headers(options: &BindgenOptions, logger: &Logger) -> Result<Module, ()> {
+fn parse_headers(options: &BindgenOptions, logger: &Logger) -> Result<ModuleMap, ()> {
     fn str_to_ikind(s: &str) -> Option<types::IKind> {
         match s {
             "uchar"     => Some(types::IUChar),

@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT, Ordering};
 
 use syntax::abi;
 
@@ -10,35 +11,37 @@ pub use self::Type::*;
 pub use self::IKind::*;
 pub use self::FKind::*;
 
+static NEXT_MODULE_ID: AtomicUsize = ATOMIC_USIZE_INIT;
+
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
+pub struct ModuleId(usize);
+pub static ROOT_MODULE_ID: ModuleId = ModuleId(0);
+
+impl ModuleId {
+    pub fn next() -> ModuleId {
+        ModuleId(NEXT_MODULE_ID.fetch_add(1, Ordering::SeqCst) + 1)
+    }
+}
+
+pub type ModuleMap = HashMap<ModuleId, Module>;
+
 #[derive(Clone)]
 pub struct Module {
-    globals: Vec<Global>,
-    submodules: HashMap<String, Module>,
+    pub name: String,
+    pub globals: Vec<Global>,
+    pub parent_id: Option<ModuleId>,
+    // Just for convenience
+    pub children_ids: Vec<ModuleId>,
 }
 
 impl Module {
-    pub fn new() -> Self {
-        Self::with_globals(vec![])
-    }
-
-    pub fn with_globals(globals: Vec<Global>) -> Self {
+    pub fn new(name: String, parent_id: Option<ModuleId>) -> Self {
         Module {
-            globals: globals,
-            submodules: HashMap::new(),
+            name: name,
+            globals: vec![],
+            parent_id: parent_id,
+            children_ids: vec![],
         }
-    }
-
-    pub fn globals(&mut self) -> &mut Vec<Global> {
-        &mut self.globals
-    }
-
-    pub fn submodules(&mut self) -> &mut HashMap<String, Module> {
-        &mut self.submodules
-    }
-
-    pub fn add_submodule(&mut self, name: String, module: Module) {
-        debug_assert!(!self.submodules.contains_key(&name));
-        self.submodules.insert(name, module);
     }
 
     #[allow(dead_code)]
@@ -218,6 +221,7 @@ pub enum CompKind {
 pub struct CompInfo {
     pub kind: CompKind,
     pub name: String,
+    pub module_id: ModuleId,
     pub filename: String,
     pub comment: String,
     pub members: Vec<CompMember>,
@@ -244,9 +248,10 @@ fn unnamed_name(name: String, filename: &String) -> String {
 }
 
 impl CompInfo {
-    pub fn new(name: String, filename: String, comment: String, kind: CompKind, members: Vec<CompMember>, layout: Layout) -> CompInfo {
+    pub fn new(name: String, module_id: ModuleId, filename: String, comment: String, kind: CompKind, members: Vec<CompMember>, layout: Layout) -> CompInfo {
         CompInfo {
             kind: kind,
+            module_id: module_id,
             name: unnamed_name(name, &filename),
             filename: filename,
             comment: comment,
@@ -292,6 +297,7 @@ impl FieldInfo {
 #[derive(Clone, PartialEq)]
 pub struct EnumInfo {
     pub name: String,
+    pub module_id: ModuleId,
     pub comment: String,
     pub filename: String,
     pub items: Vec<EnumItem>,
@@ -300,9 +306,10 @@ pub struct EnumInfo {
 }
 
 impl EnumInfo {
-    pub fn new(name: String, filename: String, kind: IKind, items: Vec<EnumItem>, layout: Layout) -> EnumInfo {
+    pub fn new(name: String, module_id: ModuleId, filename: String, kind: IKind, items: Vec<EnumItem>, layout: Layout) -> EnumInfo {
         EnumInfo {
             name: unnamed_name(name, &filename),
+            module_id: module_id,
             comment: String::new(),
             filename: filename,
             items: items,
@@ -338,15 +345,17 @@ impl EnumItem {
 #[derive(Clone, PartialEq)]
 pub struct TypeInfo {
     pub name: String,
+    pub module_id: ModuleId,
     pub comment: String,
     pub ty: Type,
     pub layout: Layout,
 }
 
 impl TypeInfo {
-    pub fn new(name: String, ty: Type, layout: Layout) -> TypeInfo {
+    pub fn new(name: String, module_id: ModuleId, ty: Type, layout: Layout) -> TypeInfo {
         TypeInfo {
             name: name,
+            module_id: module_id,
             comment: String::new(),
             ty: ty,
             layout: layout,
