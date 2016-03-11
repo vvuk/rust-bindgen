@@ -148,6 +148,7 @@ Options:
                                (for example __builtin_va_list)
     -ignore-functions          Don't generate bindings for functions and methods.
                                This is useful when you only care about struct layouts.
+    -enable-cxx-namespaces     Enable support for C++ namespaces.
     -allow-unknown-types       Don't fail if we encounter types we do not support,
                                instead treat them as void
     -emit-clang-ast            Output the ast (for debugging purposes)
