@@ -514,18 +514,10 @@ pub struct TranslationUnit {
 
 impl TranslationUnit {
     pub fn parse(ix: &Index, file: &str, cmd_args: &[String],
-<<<<<<< c065241fa38738086d870856b6f75894458e8663
-                 unsaved: &[UnsavedFile], opts: c_uint) -> TranslationUnit {
-        let fname = CString::new(file.as_bytes()).unwrap();
-        let fname = fname.as_ptr();
-        let c_args: Vec<CString> = cmd_args.iter().map(|s| CString::new(s.as_bytes()).unwrap()).collect();
-        let c_args: Vec<*const c_char> = c_args.iter().map(|s| s.as_ptr()).collect();
-=======
                  unsaved: &[UnsavedFile], opts: ::libc::c_uint) -> TranslationUnit {
         let fname = CString::new(file).unwrap();
         let _c_args: Vec<CString> = cmd_args.iter().map(|s| CString::new(s.clone()).unwrap()).collect();
         let c_args: Vec<*const c_char> = _c_args.iter().map(|s| s.as_ptr()).collect();
->>>>>>> Rustup to b301e02f3 2015-05-19
         let mut c_unsaved: Vec<Struct_CXUnsavedFile> = unsaved.iter().map(|f| f.x).collect();
         let tu = unsafe {
             clang_parseTranslationUnit(ix.x, fname.as_ptr(),
