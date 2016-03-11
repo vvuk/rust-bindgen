@@ -37,7 +37,7 @@ fn main() {
     } else if cfg!(target_os = "macos") {
         MAC_CLANG_DIR.iter().map(ToString::to_string).collect()
     } else if cfg!(target_os = "windows") {
-		WIN_CLANG_DIRS.iter().map(ToString::to_string).collect()
+        WIN_CLANG_DIRS.iter().map(ToString::to_string).collect()
     } else {
         panic!("Platform not supported");
     };
@@ -60,7 +60,7 @@ fn main() {
             None
         }
     }).next();
-    if maybe_clang_dir == None && cfg!(target_os = "linux") {
+    if maybe_clang_dir.is_none() && cfg!(target_os = "linux") {
         //try to find via lddconfig
         //may return line, like
         //libclang.so.3.7 (libc6,x86-64) => /usr/lib64/libclang.so.3.7

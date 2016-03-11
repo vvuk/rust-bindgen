@@ -275,7 +275,7 @@ fn mk_fn_sig(ctx: &mut ClangParserCtx, ty: &cx::Type, cursor: &Cursor) -> il::Fu
 
     // Function is presumed unsafe if it takes a pointer argument.
     let is_unsafe = args_lst.iter().any(|arg| match arg.1 {
-        TPtr(_, _, _) => true,
+        TPtr(..) => true,
         _ => false
     });
 
