@@ -154,7 +154,7 @@ impl Type {
         match *self {
             TInt(_, l) => l.align,
             TFloat(_, l) => l.align,
-            TPtr(_, _, l) => l.align,
+            TPtr(_, _, _, l) => l.align,
             TArray(_, _, l) => l.align,
             TNamed(ref ti) => ti.borrow().ty.align(),
             TComp(ref ci) => ci.borrow().layout.align,
@@ -165,16 +165,17 @@ impl Type {
         }
     }
 
+    #[allow(dead_code)]
     pub fn can_derive_debug(&self) -> bool {
-        match self {
-            &TArray(_, size, _) => size <= 32,
-            &TComp(ref comp) => {
+        match *self {
+            TArray(_, size, _) => size <= 32,
+            TComp(ref comp) => {
                 comp.borrow()
                     .members
                     .iter()
-                    .all(|member| match member {
-                        &CompMember::Field(ref f) |
-                        &CompMember::CompField(_, ref f) => f.ty.can_derive_debug(),
+                    .all(|member| match *member {
+                        CompMember::Field(ref f) |
+                        CompMember::CompField(_, ref f) => f.ty.can_derive_debug(),
                         _ => true,
                     })
             }
@@ -216,6 +217,7 @@ pub enum IKind {
 }
 
 impl IKind {
+    #[allow(dead_code)]
     pub fn is_signed(self) -> bool {
         match self {
             IBool => false,

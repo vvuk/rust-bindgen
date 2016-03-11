@@ -115,7 +115,6 @@ pub struct BindgenOptions {
     pub enable_cxx_namespaces: bool,
     pub override_enum_ty: String,
     pub clang_args: Vec<String>,
-    pub derive_debug: bool,
 }
 
 impl Default for BindgenOptions {

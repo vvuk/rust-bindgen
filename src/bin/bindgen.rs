@@ -35,7 +35,6 @@ fn parse_args(args: &[String]) -> ParseResult {
     let args_len = args.len();
 
     let mut options: BindgenOptions = Default::default();
-    options.derive_debug = false;
     let mut out = Box::new(io::BufWriter::new(io::stdout())) as Box<io::Write>;
 
     if args_len == 0 {
