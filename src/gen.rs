@@ -501,7 +501,7 @@ fn gen_globals(mut ctx: &mut GenCtx,
     }
 
     for (abi, funcs) in funcs.into_iter() {
-        defs.push(mk_extern(&mut ctx, &options.links, funcs, abi));
+        defs.push(mk_extern(&mut ctx, &links, funcs, abi));
     }
 
     //let attrs = vec!(mk_attr_list(&mut ctx, "allow", ["dead_code", "non_camel_case_types", "uppercase_variables"]));
@@ -1552,9 +1552,8 @@ fn mk_doc_attr(ctx: &mut GenCtx, doc: &str) -> Vec<ast::Attribute> {
 }
 
 fn cvar_to_rs(ctx: &mut GenCtx, name: String,
-                                mangled: String,
-                                ty: &Type,
-                                is_const: bool) -> P<ast::ForeignItem> {
+              mangled: String, ty: &Type,
+              is_const: bool) -> P<ast::ForeignItem> {
     let (rust_name, was_mangled) = rust_id(ctx, &name);
 
     let mut attrs = Vec::new();
@@ -1566,14 +1565,14 @@ fn cvar_to_rs(ctx: &mut GenCtx, name: String,
 
     let val_ty = P(cty_to_rs(ctx, ty, true, true));
 
-    return P(ast::ForeignItem {
+    P(ast::ForeignItem {
         ident: ctx.ext_cx.ident_of(&rust_name),
         attrs: attrs,
         node: ast::ForeignItemKind::Static(val_ty, !is_const),
         id: ast::DUMMY_NODE_ID,
         span: ctx.span,
         vis: ast::Visibility::Public,
-    }
+    })
 }
 
 fn cfuncty_to_rs(ctx: &mut GenCtx,
@@ -1721,7 +1720,6 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool, use_full_path: bool)
         },
         TNamed(ref ti) => {
             let id = rust_type_id(ctx, &ti.borrow().name);
-            mk_ty(ctx, false, &[id])
 
             if use_full_path {
                 let mut path = ctx.full_path_for_module(ti.borrow().module_id);
