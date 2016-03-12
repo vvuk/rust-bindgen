@@ -1175,7 +1175,19 @@ fn cunion_to_rs(ctx: &mut GenCtx, name: &str, layout: Layout, members: Vec<CompM
         empty_generics()
     );
     let union_id = rust_type_id(ctx, name);
-    let union_attrs = vec!(mk_repr_attr(ctx, layout), mk_deriving_copy_and_maybe_debug_attr(ctx));
+    let mut union_attrs = vec!(mk_repr_attr(ctx, layout));
+    let can_derive_debug = members.iter()
+                                  .all(|member| match *member {
+                                      CompMember::Field(ref f) |
+                                      CompMember::CompField(_, ref f) => f.ty.can_derive_debug(),
+                                      _ => true
+                                  });
+    union_attrs.push(if can_derive_debug {
+        mk_deriving_copy_and_maybe_debug_attr(ctx)
+    } else {
+        mk_deriving_copy_attr(ctx)
+    });
+
     let union_def = mk_item(ctx, union_id, def, ast::Visibility::Public, union_attrs);
 
     let union_impl = ast::ItemKind::Impl(
