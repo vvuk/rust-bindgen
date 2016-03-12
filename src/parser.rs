@@ -110,6 +110,7 @@ fn decl_name(ctx: &mut ClangParserCtx, cursor: &Cursor) -> Global {
                         _ => IInt,
                     }
                 };
+
                 let ei = Rc::new(RefCell::new(EnumInfo::new(spelling, ctx.current_module_id, filename, kind, vec!(), layout)));
                 GEnumDecl(ei)
             }

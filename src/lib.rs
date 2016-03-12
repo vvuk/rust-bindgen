@@ -83,6 +83,11 @@ impl<'a> Builder<'a> {
         self
     }
 
+    pub fn rename_types(&mut self, value: bool) -> &mut Self {
+        self.options.rename_types = value;
+        self
+    }
+
     pub fn log(&mut self, logger: &'a Logger) -> &mut Self {
         self.logger = Some(logger);
         self
@@ -114,6 +119,7 @@ pub struct BindgenOptions {
     pub fail_on_unknown_type: bool,
     pub enable_cxx_namespaces: bool,
     pub rename_types: bool,
+    pub derive_debug: bool,
     pub override_enum_ty: String,
     pub clang_args: Vec<String>,
 }
@@ -129,6 +135,7 @@ impl Default for BindgenOptions {
             ignore_functions: false,
             fail_on_unknown_type: true,
             rename_types: true,
+            derive_debug: true,
             enable_cxx_namespaces: false,
             override_enum_ty: "".to_string(),
             clang_args: Vec::new()
@@ -167,8 +174,7 @@ impl Bindings {
             inner: span,
             items: gen::gen_mods(&options.links[..],
                                  module_map,
-                                 options.enable_cxx_namespaces,
-                                 options.rename_types,
+                                 options.clone(),
                                  span)
         };
 
