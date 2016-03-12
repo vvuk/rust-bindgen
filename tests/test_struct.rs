@@ -187,8 +187,7 @@ fn with_anon_unnamed_struct() {
 fn with_anon_unnamed_union() {
     assert_bind_eq(Default::default(), "headers/struct_with_anon_unnamed_union.h", "
         #[repr(C)]
-        #[derive(Copy)]
-        #[derive(Debug)]
+        #[derive(Copy, Clone)]
         pub struct Struct_foo {
             pub _bindgen_data_1_: [u32; 1usize],
         }
