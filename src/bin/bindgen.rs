@@ -117,6 +117,10 @@ fn parse_args(args: &[String]) -> ParseResult {
                     options.enable_cxx_namespaces = true;
                     ix += 1;
                 }
+                "-no-type-renaming" => {
+                    options.rename_types = false;
+                    ix += 1;
+                }
                 _ => {
                     options.clang_args.push(args[ix].clone());
                     ix += 1;
@@ -148,6 +152,7 @@ Options:
     -ignore-functions          Don't generate bindings for functions and methods.
                                This is useful when you only care about struct layouts.
     -enable-cxx-namespaces     Enable support for C++ namespaces.
+    -no-type-renaming          Don't rename types.
     -allow-unknown-types       Don't fail if we encounter types we do not support,
                                instead treat them as void
     -emit-clang-ast            Output the ast (for debugging purposes)

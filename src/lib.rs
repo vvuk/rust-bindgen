@@ -113,6 +113,7 @@ pub struct BindgenOptions {
     pub ignore_functions: bool,
     pub fail_on_unknown_type: bool,
     pub enable_cxx_namespaces: bool,
+    pub rename_types: bool,
     pub override_enum_ty: String,
     pub clang_args: Vec<String>,
 }
@@ -127,6 +128,7 @@ impl Default for BindgenOptions {
             emit_ast: false,
             ignore_functions: false,
             fail_on_unknown_type: true,
+            rename_types: true,
             enable_cxx_namespaces: false,
             override_enum_ty: "".to_string(),
             clang_args: Vec::new()
@@ -166,6 +168,7 @@ impl Bindings {
             items: gen::gen_mods(&options.links[..],
                                  module_map,
                                  options.enable_cxx_namespaces,
+                                 options.rename_types,
                                  span)
         };
 

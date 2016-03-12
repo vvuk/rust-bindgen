@@ -25,6 +25,7 @@ struct GenCtx<'r> {
     span: Span,
     module_map: ModuleMap,
     enable_cxx_namespaces: bool,
+    rename_types: bool,
     current_module_id: ModuleId,
 }
 
@@ -96,23 +97,35 @@ fn rust_type_id(ctx: &mut GenCtx, name: &str) -> String {
     }
 }
 
-fn comp_name(kind: CompKind, name: &str) -> String {
+fn comp_name(ctx: &GenCtx, kind: CompKind, name: &str) -> String {
     match kind {
-        CompKind::Struct => struct_name(name),
-        CompKind::Union  => union_name(name),
+        CompKind::Struct => struct_name(ctx, name),
+        CompKind::Union  => union_name(ctx, name),
     }
 }
 
-fn struct_name(name: &str) -> String {
-    name.to_owned()
+fn struct_name(ctx: &GenCtx, name: &str) -> String {
+    if ctx.rename_types {
+        format!("Struct_{}", name)
+    } else {
+        name.to_owned()
+    }
 }
 
-fn union_name(name: &str) -> String {
-    name.to_owned()
+fn union_name(ctx: &GenCtx, name: &str) -> String {
+    if ctx.rename_types {
+        format!("Union_{}", name)
+    } else {
+        name.to_owned()
+    }
 }
 
-fn enum_name(name: &str) -> String {
-    name.to_owned()
+fn enum_name(ctx: &GenCtx, name: &str) -> String {
+    if ctx.rename_types {
+        format!("Enum_{}", name)
+    } else {
+        name.to_owned()
+    }
 }
 
 fn gen_unmangle_method(ctx: &mut GenCtx,
@@ -243,6 +256,7 @@ fn gen_unmangle_method(ctx: &mut GenCtx,
 pub fn gen_mods(links: &[(String, LinkType)],
                 map: ModuleMap,
                 enable_namespaces: bool,
+                rename_types: bool,
                 span: Span) -> Vec<P<ast::Item>> {
     // Create a dummy ExtCtxt. We only need this for string interning and that uses TLS.
     let mut features = Features::new();
@@ -260,6 +274,7 @@ pub fn gen_mods(links: &[(String, LinkType)],
         span: span,
         module_map: map,
         enable_cxx_namespaces: enable_namespaces,
+        rename_types: rename_types,
         current_module_id: ROOT_MODULE_ID,
     };
 
@@ -420,20 +435,25 @@ fn gen_globals(mut ctx: &mut GenCtx,
             },
             GCompDecl(ci) => {
                 let c = ci.borrow().clone();
-                defs.push(opaque_to_rs(&mut ctx, comp_name(c.kind, &c.name)));
+                let name = comp_name(&ctx, c.kind, &c.name);
+
+                defs.push(opaque_to_rs(&mut ctx, &name));
             },
             GComp(ci) => {
                 let c = ci.borrow().clone();
-                defs.extend(comp_to_rs(&mut ctx, comp_name(c.kind, &c.name),
-                                       c).into_iter())
+                let name = comp_name(&ctx, c.kind, &c.name);
+                defs.extend(comp_to_rs(&mut ctx, &name, c).into_iter())
             },
             GEnumDecl(ei) => {
                 let e = ei.borrow().clone();
-                defs.push(opaque_to_rs(&mut ctx, enum_name(&e.name)));
+                let name = enum_name(&ctx, &e.name);
+
+                defs.push(opaque_to_rs(&mut ctx, &name));
             },
             GEnum(ei) => {
                 let e = ei.borrow().clone();
-                defs.extend(cenum_to_rs(&mut ctx, enum_name(&e.name), e.comment, e.items, e.layout).into_iter())
+                let name = enum_name(&ctx, &e.name);
+                defs.extend(cenum_to_rs(&mut ctx, name, e.comment, e.items, e.layout).into_iter())
             },
             GVar(vi) => {
                 let v = vi.borrow();
@@ -761,7 +781,7 @@ fn ctypedef_to_rs(ctx: &mut GenCtx, ty: TypeInfo) -> Vec<ast::Item> {
     }
 }
 
-fn comp_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo)
+fn comp_to_rs(ctx: &mut GenCtx, name: &str, ci: CompInfo)
               -> Vec<ast::Item> {
     match ci.kind {
         CompKind::Struct => cstruct_to_rs(ctx, name, ci),
@@ -769,7 +789,7 @@ fn comp_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo)
     }
 }
 
-fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<ast::Item> {
+fn cstruct_to_rs(ctx: &mut GenCtx, name: &str, ci: CompInfo) -> Vec<ast::Item> {
     let layout = ci.layout;
     let members = &ci.members;
     let template_args = &ci.args;
@@ -788,7 +808,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<ast::Item>
         return vec!();
     }
 
-    let id = rust_type_id(ctx, &name);
+    let id = rust_type_id(ctx, name);
     let id_ty = P(mk_ty(ctx, false, &[id.clone()]));
 
     if ci.has_vtable {
@@ -985,7 +1005,8 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<ast::Item>
                 fields.push(mk_blob_field(ctx, &field_name, c.layout));
                 methods.extend(gen_comp_methods(ctx, &field_name, 0, c.kind, &c.members, &mut extra).into_iter());
             } else {
-                extra.extend(comp_to_rs(ctx, comp_name(c.kind, &c.name), c.clone()).into_iter());
+                let name = comp_name(&ctx, c.kind, &c.name);
+                extra.extend(comp_to_rs(ctx, &name, c.clone()).into_iter());
             }
         }
     }
@@ -1105,7 +1126,7 @@ fn cstruct_to_rs(ctx: &mut GenCtx, name: String, ci: CompInfo) -> Vec<ast::Item>
     items
 }
 
-fn opaque_to_rs(ctx: &mut GenCtx, name: String) -> ast::Item {
+fn opaque_to_rs(ctx: &mut GenCtx, name: &str) -> ast::Item {
     let def = ast::ItemKind::Enum(
         ast::EnumDef {
            variants: vec!()
@@ -1113,7 +1134,7 @@ fn opaque_to_rs(ctx: &mut GenCtx, name: String) -> ast::Item {
         empty_generics()
     );
 
-    let id = rust_type_id(ctx, &name);
+    let id = rust_type_id(ctx, name);
     ast::Item {
         ident: ctx.ext_cx.ident_of(&id),
         attrs: Vec::new(),
@@ -1124,7 +1145,7 @@ fn opaque_to_rs(ctx: &mut GenCtx, name: String) -> ast::Item {
     }
 }
 
-fn cunion_to_rs(ctx: &mut GenCtx, name: String, layout: Layout, members: Vec<CompMember>) -> Vec<ast::Item> {
+fn cunion_to_rs(ctx: &mut GenCtx, name: &str, layout: Layout, members: Vec<CompMember>) -> Vec<ast::Item> {
     fn mk_item(ctx: &mut GenCtx, name: String, item: ast::ItemKind, vis:
                ast::Visibility, attrs: Vec<ast::Attribute>) -> ast::Item {
         ast::Item {
@@ -1138,8 +1159,8 @@ fn cunion_to_rs(ctx: &mut GenCtx, name: String, layout: Layout, members: Vec<Com
     }
 
     // XXX what module id is correct?
-    let ci = Rc::new(RefCell::new(CompInfo::new(name.clone(), ROOT_MODULE_ID, name.clone(), "".to_owned(), CompKind::Union, members.clone(), layout)));
-    let union = TNamed(Rc::new(RefCell::new(TypeInfo::new(name.clone(), ROOT_MODULE_ID, TComp(ci), layout))));
+    let ci = Rc::new(RefCell::new(CompInfo::new(name.to_owned(), ROOT_MODULE_ID, name.to_owned(), "".to_owned(), CompKind::Union, members.clone(), layout)));
+    let union = TNamed(Rc::new(RefCell::new(TypeInfo::new(name.to_owned(), ROOT_MODULE_ID, TComp(ci), layout))));
 
     // Nested composites may need to emit declarations and implementations as
     // they are encountered.  The declarations end up in 'extra' and are emitted
@@ -1153,7 +1174,7 @@ fn cunion_to_rs(ctx: &mut GenCtx, name: String, layout: Layout, members: Vec<Com
         ast::VariantData::Struct(vec![data_field], ast::DUMMY_NODE_ID),
         empty_generics()
     );
-    let union_id = rust_type_id(ctx, &name);
+    let union_id = rust_type_id(ctx, name);
     let union_attrs = vec!(mk_repr_attr(ctx, layout), mk_deriving_copy_attr(ctx));
     let union_def = mk_item(ctx, union_id, def, ast::Visibility::Public, union_attrs);
 
@@ -1202,7 +1223,11 @@ fn const_to_rs(ctx: &mut GenCtx, name: String, val: i64, val_ty: ast::Ty) -> ast
     }
 }
 
-fn cenum_to_rs(ctx: &mut GenCtx, name: String, comment: String, items: Vec<EnumItem>, layout: Layout) -> Vec<ast::Item> {
+fn cenum_to_rs(ctx: &mut GenCtx,
+               name: String,
+               comment: String,
+               items: Vec<EnumItem>,
+               layout: Layout) -> Vec<ast::Item> {
     // Rust is not happy with univariant enums
     if items.len() < 2 {
         return vec!();
@@ -1330,7 +1355,8 @@ fn gen_comp_methods(ctx: &mut GenCtx, data_field: &str, data_offset: usize,
                 methods.extend(mk_field_method(ctx, f, offset).into_iter());
 
                 let c = rc_c.borrow();
-                extra.extend(comp_to_rs(ctx, comp_name(c.kind, &c.name), c.clone()).into_iter());
+                let name = comp_name(&ctx, c.kind, &c.name);
+                extra.extend(comp_to_rs(ctx, &name, c.clone()).into_iter());
                 f.ty.size()
             }
             CompMember::Enum(_) => 0
@@ -1730,7 +1756,7 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool, use_full_path: bool)
         },
         TComp(ref ci) => {
             let c = ci.borrow();
-            let id = comp_name(c.kind, &c.name);
+            let id = comp_name(&ctx, c.kind, &c.name);
 
             let args = c.args.iter().map(|gt| {
                 P(cty_to_rs(ctx, gt, allow_bool, false))
@@ -1747,7 +1773,7 @@ fn cty_to_rs(ctx: &mut GenCtx, ty: &Type, allow_bool: bool, use_full_path: bool)
         },
         TEnum(ref ei) => {
             let e = ei.borrow();
-            let id = enum_name(&e.name);
+            let id = enum_name(&ctx, &e.name);
 
             if use_full_path {
                 let mut path = ctx.full_path_for_module(e.module_id);
