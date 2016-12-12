@@ -869,14 +869,14 @@ impl TypeCollector for CompInfo {
     type Extra = Item;
 
     fn collect_types(&self,
-                     context: &BindgenContext,
+                     ctx: &BindgenContext,
                      types: &mut ItemSet,
                      item: &Item) {
         if let Some(template) = self.specialized_template() {
             types.insert(template);
         }
 
-        let applicable_template_args = item.applicable_template_args(context);
+        let applicable_template_args = item.applicable_template_args(ctx);
         for arg in applicable_template_args {
             types.insert(arg);
         }
@@ -893,6 +893,11 @@ impl TypeCollector for CompInfo {
             types.insert(ty);
         }
 
-        // FIXME(emilio): Methods, VTable?
+        // FIXME(emilio): Fix builds before running this by default.
+        if ctx.options().codegen_config.methods {
+            for method in self.methods() {
+                types.insert(method.signature);
+            }
+        }
     }
 }
