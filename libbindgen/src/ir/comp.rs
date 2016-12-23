@@ -688,9 +688,9 @@ impl CompInfo {
                         return CXChildVisit_Continue;
                     }
 
-                    if cur.is_inlined_function() {
-                        return CXChildVisit_Continue;
-                    }
+                    //if cur.is_inlined_function() {
+                    //    return CXChildVisit_Continue;
+                    //}
 
                     let spelling = cur.spelling();
                     if spelling.starts_with("operator") {

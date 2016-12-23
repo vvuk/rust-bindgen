@@ -785,7 +785,13 @@ impl Type {
             }
             CXType_Auto => {
                 // We don't want to blow the stack.
-                assert!(canonical_ty != *ty, "Couldn't find deduced type");
+                // MSVC builds hit this in the builtin definitions
+                if canonical_ty == *ty && ty.declaration().kind() == CXCursor_NoDeclFound {
+                    warn!("Couldn't find deduced type for {:?}", ty);
+                    return Err(ParseError::Continue);
+                } else {
+                    assert!(canonical_ty != *ty, "Couldn't find deduced type");
+                }
                 return Self::from_clang_ty(potential_id,
                                            &canonical_ty,
                                            location,
